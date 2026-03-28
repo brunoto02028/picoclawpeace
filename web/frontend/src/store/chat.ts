@@ -10,6 +10,7 @@ export interface ChatMessage {
   role: "user" | "assistant"
   content: string
   timestamp: number | string
+  media?: string[]
 }
 
 export type ConnectionState =
@@ -18,10 +19,24 @@ export type ConnectionState =
   | "connected"
   | "error"
 
+export interface LiveLogEntry {
+  id: number
+  tool: string
+  arg: string
+  startMs: number
+  endMs?: number
+  isError?: boolean
+}
+
 export interface ChatStoreState {
   messages: ChatMessage[]
   connectionState: ConnectionState
   isTyping: boolean
+  currentTool: string | null
+  toolHistory: string[]
+  liveLog: LiveLogEntry[]
+  lastPongAt: number
+  agentBusyStartMs: number | null
   activeSessionId: string
   hasHydratedActiveSession: boolean
 }
@@ -32,6 +47,11 @@ const DEFAULT_CHAT_STATE: ChatStoreState = {
   messages: [],
   connectionState: "disconnected",
   isTyping: false,
+  currentTool: null,
+  toolHistory: [],
+  liveLog: [],
+  lastPongAt: Date.now(),
+  agentBusyStartMs: null,
   activeSessionId: getInitialActiveSessionId(),
   hasHydratedActiveSession: false,
 }

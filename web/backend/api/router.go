@@ -81,9 +81,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// WeCom QR login flow
 	h.registerWecomRoutes(mux)
+
+	// Kanban task management
+	h.registerTaskRoutes(mux)
 }
 
-// Shutdown gracefully shuts down the handler, stopping the gateway if it was started by this handler.
-func (h *Handler) Shutdown() {
-	h.StopGateway()
-}
+// Shutdown gracefully shuts down the handler.
+// The gateway process is intentionally left running so it survives picoclaw-web
+// restarts and the user's session is not interrupted.
+func (h *Handler) Shutdown() {}

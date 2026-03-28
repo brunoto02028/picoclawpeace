@@ -4,6 +4,8 @@ import {
   IconChevronsDown,
   IconChevronsUp,
   IconKey,
+  IconLayoutDashboard,
+  IconLayoutKanban,
   IconListDetails,
   IconMessageCircle,
   IconSettings,
@@ -48,6 +50,10 @@ interface NavGroup {
 
 const baseNavGroups: Omit<NavGroup, "items">[] = [
   {
+    label: "navigation.overview",
+    defaultOpen: true,
+  },
+  {
     label: "navigation.chat",
     defaultOpen: true,
   },
@@ -85,6 +91,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ...baseNavGroups[0],
         items: [
           {
+            title: "navigation.dashboard",
+            url: "/dashboard",
+            icon: IconLayoutDashboard,
+            translateTitle: true,
+          },
+          {
+            title: "Tasks",
+            url: "/tasks",
+            icon: IconLayoutKanban,
+            translateTitle: false,
+          },
+        ],
+      },
+      {
+        ...baseNavGroups[1],
+        items: [
+          {
             title: "navigation.chat",
             url: "/",
             icon: IconMessageCircle,
@@ -93,7 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ],
       },
       {
-        ...baseNavGroups[1],
+        ...baseNavGroups[2],
         items: [
           {
             title: "navigation.models",
@@ -121,7 +144,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         isChannelsGroup: true,
       },
       {
-        ...baseNavGroups[2],
+        ...baseNavGroups[3],
         items: [
           {
             title: "navigation.skills",
@@ -138,7 +161,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ],
       },
       {
-        ...baseNavGroups[3],
+        ...baseNavGroups[4],
         items: [
           {
             title: "navigation.config",

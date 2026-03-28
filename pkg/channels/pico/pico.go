@@ -525,7 +525,20 @@ func (c *PicoChannel) handleMessage(pc *picoConn, msg PicoMessage) {
 // handleMessageSend processes an inbound message.send from a client.
 func (c *PicoChannel) handleMessageSend(pc *picoConn, msg PicoMessage) {
 	content, _ := msg.Payload["content"].(string)
-	if strings.TrimSpace(content) == "" {
+
+	var media []string
+	if rawMedia, ok := msg.Payload["media"]; ok {
+		switch v := rawMedia.(type) {
+		case []interface{}:
+			for _, item := range v {
+				if s, ok := item.(string); ok && s != "" {
+					media = append(media, s)
+				}
+			}
+		}
+	}
+
+	if strings.TrimSpace(content) == "" && len(media) == 0 {
 		errMsg := newError("empty_content", "message content is empty")
 		pc.writeJSON(errMsg)
 		return
@@ -562,7 +575,78 @@ func (c *PicoChannel) handleMessageSend(pc *picoConn, msg PicoMessage) {
 		return
 	}
 
-	c.HandleMessage(c.ctx, peer, msg.ID, senderID, chatID, content, nil, metadata, sender)
+	c.HandleMessage(c.ctx, peer, msg.ID, senderID, chatID, content, media, metadata, sender)
+}
+
+// ForwardAgentEvent broadcasts an agent lifecycle event (e.g. tool.exec.start)
+// to all WebSocket clients connected to the given sessionID.
+func (c *PicoChannel) ForwardAgentEvent(sessionID, msgType string, payload map[string]any) {
+	msg := newMessage(msgType, payload)
+	_ = c.broadcastToSession("pico:"+sessionID, msg)
+}
+
+// DeleteMessage implements channels.MessageDeleter.
+// Sends a message.delete event to remove a placeholder when streaming takes over.
+func (c *PicoChannel) DeleteMessage(ctx context.Context, chatID string, messageID string) error {
+	outMsg := newMessage(TypeMessageDelete, map[string]any{
+		"message_id": messageID,
+	})
+	return c.broadcastToSession(chatID, outMsg)
+}
+
+// BeginStream implements channels.StreamingCapable.
+// It creates a placeholder message and returns a streamer that sends
+// incremental TypeMessageUpdate events to the WebSocket client.
+func (c *PicoChannel) BeginStream(ctx context.Context, chatID string) (channels.Streamer, error) {
+	if !c.IsRunning() {
+		return nil, channels.ErrNotRunning
+	}
+	msgID := uuid.New().String()
+	outMsg := newMessage(TypeMessageCreate, map[string]any{
+		"content":    "…",
+		"message_id": msgID,
+	})
+	if err := c.broadcastToSession(chatID, outMsg); err != nil {
+		return nil, err
+	}
+	return &picoStreamer{
+		channel:   c,
+		chatID:    chatID,
+		messageID: msgID,
+		throttle:  150 * time.Millisecond,
+	}, nil
+}
+
+// picoStreamer streams partial LLM output to the Pico WebSocket client.
+type picoStreamer struct {
+	channel   *PicoChannel
+	chatID    string
+	messageID string
+	throttle  time.Duration
+	lastAt    time.Time
+	lastLen   int
+	mu        sync.Mutex
+}
+
+func (s *picoStreamer) Update(ctx context.Context, content string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	growth := len(content) - s.lastLen
+	if s.lastLen > 0 && now.Sub(s.lastAt) < s.throttle && growth < 20 {
+		return nil
+	}
+	s.lastLen = len(content)
+	s.lastAt = now
+	return s.channel.EditMessage(ctx, s.chatID, s.messageID, content)
+}
+
+func (s *picoStreamer) Finalize(ctx context.Context, content string) error {
+	return s.channel.EditMessage(ctx, s.chatID, s.messageID, content)
+}
+
+func (s *picoStreamer) Cancel(_ context.Context) {
+	_ = s.channel.DeleteMessage(context.Background(), s.chatID, s.messageID)
 }
 
 // truncate truncates a string to maxLen runes.

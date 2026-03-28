@@ -382,6 +382,7 @@ func (h *Handler) startGatewayLocked(initialStatus string, existingPid int) (int
 	execPath := utils.FindPicoclawBinary()
 
 	cmd = exec.Command(execPath, "gateway", "-E")
+	cmd.SysProcAttr = gatewayProcAttr()
 	cmd.Env = os.Environ()
 	// Forward the launcher's config path via the environment variable that
 	// GetConfigPath() already reads, so the gateway sub-process uses the same

@@ -1,5 +1,7 @@
 {
   "navigation": {
+    "overview": "Overview",
+    "dashboard": "Dashboard",
     "chat": "Chat",
     "model_group": "Models",
     "models": "Models",
@@ -13,6 +15,39 @@
     "show_less_channels": "Less",
     "config": "Config",
     "logs": "Logs"
+  },
+  "dashboard": {
+    "gateway": {
+      "title": "Gateway",
+      "running": "Running",
+      "stopped": "Stopped",
+      "starting": "Starting...",
+      "restarting": "Restarting...",
+      "stopping": "Stopping..."
+    },
+    "models": {
+      "configured": "{{count}} of {{total}} configured"
+    },
+    "channels": {
+      "available": "Available channels"
+    },
+    "sessions": {
+      "title": "Sessions",
+      "recent": "Recent sessions",
+      "recentTitle": "Recent Conversations",
+      "startChat": "Start a conversation"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "chat": "Open Chat",
+      "chatDesc": "Start or continue a conversation with the AI assistant",
+      "models": "Manage Models",
+      "modelsDesc": "Configure API keys and AI model providers",
+      "skills": "Agent Skills",
+      "skillsDesc": "Manage skills and tools for the AI agent",
+      "config": "Settings",
+      "configDesc": "Configure gateway, channels and system preferences"
+    }
   },
   "chat": {
     "welcome": "How can I help you today?",

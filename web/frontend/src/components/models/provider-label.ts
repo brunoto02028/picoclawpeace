@@ -19,6 +19,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   vllm: "VLLM (local)",
   zhipu: "Zhipu AI (智谱)",
   mimo: "Xiaomi MiMo",
+  minimax: "MiniMax",
 }
 
 export function getProviderKey(model: string): string {

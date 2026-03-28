@@ -1,5 +1,6 @@
 import { getDefaultStore } from "jotai"
 import { toast } from "sonner"
+import i18n from "@/i18n"
 
 import { getPicoToken } from "@/api/pico"
 import {
@@ -17,7 +18,6 @@ import {
   isCurrentSocket,
   normalizeWsUrlForBrowser,
 } from "@/features/chat/websocket"
-import i18n from "@/i18n"
 import { getChatState, updateChatStore } from "@/store/chat"
 import { type GatewayState, gatewayAtom } from "@/store/gateway"
 
@@ -34,6 +34,47 @@ let connectionGeneration = 0
 let reconnectTimer: number | null = null
 let reconnectAttempts = 0
 let shouldMaintainConnection = false
+let pingIntervalRef: number | null = null
+
+const PING_INTERVAL_MS = 15_000
+const PONG_TIMEOUT_MS  = 8_000
+
+function startPingHeartbeat(socket: WebSocket, generation: number) {
+  stopPingHeartbeat()
+  pingIntervalRef = window.setInterval(() => {
+    if (!wsRef || wsRef !== socket || connectionGeneration !== generation) {
+      stopPingHeartbeat()
+      return
+    }
+    if (wsRef.readyState !== WebSocket.OPEN) {
+      stopPingHeartbeat()
+      return
+    }
+    try {
+      wsRef.send(JSON.stringify({ type: "ping", id: `ping-${Date.now()}` }))
+    } catch {
+      stopPingHeartbeat()
+      return
+    }
+    // Check for pong response after timeout
+    window.setTimeout(() => {
+      if (connectionGeneration !== generation) return
+      if (Date.now() - getChatState().lastPongAt > PING_INTERVAL_MS + PONG_TIMEOUT_MS) {
+        console.warn("[chat] Pong timeout — reconnecting")
+        stopPingHeartbeat()
+        disconnectChatInternal({ clearDesiredConnection: false })
+        void connectChat()
+      }
+    }, PONG_TIMEOUT_MS)
+  }, PING_INTERVAL_MS)
+}
+
+function stopPingHeartbeat() {
+  if (pingIntervalRef !== null) {
+    clearInterval(pingIntervalRef)
+    pingIntervalRef = null
+  }
+}
 
 function clearReconnectTimer() {
   if (reconnectTimer !== null) {
@@ -101,9 +142,18 @@ function disconnectChatInternal({
 
   invalidateSocket(socket)
 
+  const { agentBusyStartMs } = getChatState()
+  if (agentBusyStartMs) {
+    toast.warning("⚠️ Conexão perdida durante uma tarefa em andamento. O agente pode ter continuado em background.", {
+      duration: 10000,
+    })
+  }
   updateChatStore({
     connectionState: "disconnected",
     isTyping: false,
+    currentTool: null,
+    toolHistory: [],
+    agentBusyStartMs: null,
   })
 }
 
@@ -173,6 +223,8 @@ export async function connectChat() {
       updateChatStore({ connectionState: "connected" })
       isConnecting = false
       reconnectAttempts = 0
+      updateChatStore({ lastPongAt: Date.now() })
+      startPingHeartbeat(socket, generation)
     }
 
     socket.onmessage = (event) => {
@@ -210,11 +262,22 @@ export async function connectChat() {
       ) {
         return
       }
+      stopPingHeartbeat()
       wsRef = null
       isConnecting = false
+      const { agentBusyStartMs } = getChatState()
+      if (agentBusyStartMs) {
+        toast.warning("⚠️ Conexão perdida durante uma tarefa em andamento. O agente pode ter continuado em background.", {
+          duration: 10000,
+        })
+      }
       updateChatStore({
         connectionState: "disconnected",
         isTyping: false,
+        currentTool: null,
+        toolHistory: [],
+        liveLog: [],
+        agentBusyStartMs: null,
       })
       scheduleReconnect(generation, sessionId)
     }
@@ -232,6 +295,7 @@ export async function connectChat() {
       ) {
         return
       }
+      stopPingHeartbeat()
       isConnecting = false
       updateChatStore({ connectionState: "error" })
       scheduleReconnect(generation, sessionId)
@@ -324,7 +388,7 @@ export async function hydrateActiveSession() {
   return hydratePromise
 }
 
-export function sendChatMessage(content: string) {
+export function sendChatMessage(content: string, media?: string[]) {
   if (!wsRef || wsRef.readyState !== WebSocket.OPEN) {
     console.warn("WebSocket not connected")
     return false
@@ -332,11 +396,12 @@ export function sendChatMessage(content: string) {
 
   const socket = wsRef
   const id = `msg-${++msgIdCounter}-${Date.now()}`
+  const mediaList = media && media.length > 0 ? media : undefined
 
   updateChatStore((prev) => ({
     messages: [
       ...prev.messages,
-      { id, role: "user", content, timestamp: Date.now() },
+      { id, role: "user", content, timestamp: Date.now(), media: mediaList },
     ],
     isTyping: true,
   }))
@@ -346,7 +411,7 @@ export function sendChatMessage(content: string) {
       JSON.stringify({
         type: "message.send",
         id,
-        payload: { content },
+        payload: { content, ...(mediaList ? { media: mediaList } : {}) },
       }),
     )
     return true

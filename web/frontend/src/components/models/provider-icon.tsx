@@ -38,6 +38,7 @@ const PROVIDER_DOMAINS: Record<string, string> = {
   vllm: "vllm.ai",
   zhipu: "zhipuai.cn",
   mimo: "xiaomi.com",
+  minimax: "minimaxi.com",
 }
 
 interface ProviderIconProps {

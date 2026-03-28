@@ -5,27 +5,51 @@ import rehypeRaw from "rehype-raw"
 import rehypeSanitize from "rehype-sanitize"
 import remarkGfm from "remark-gfm"
 
+import { EmailDraftCard, type EmailDraft, parseEmailDraft } from "@/components/chat/email-draft-card"
 import { Button } from "@/components/ui/button"
 import { formatMessageTime } from "@/hooks/use-pico-chat"
 
 interface AssistantMessageProps {
   content: string
   timestamp?: string | number
+  onSendDraft?: (draft: EmailDraft, replyText: string) => void
 }
 
 export function AssistantMessage({
   content,
   timestamp = "",
+  onSendDraft,
 }: AssistantMessageProps) {
   const [isCopied, setIsCopied] = useState(false)
+  const [draftStatus, setDraftStatus] = useState<"pending" | "approved" | "discarded">("pending")
+
   const formattedTimestamp =
     timestamp !== "" ? formatMessageTime(timestamp) : ""
+
+  const draft = parseEmailDraft(content)
+  const textContent = draft
+    ? content.replace(/\[EMAIL_DRAFT\][\s\S]*?\[\/EMAIL_DRAFT\]/i, "").trim()
+    : content
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content).then(() => {
       setIsCopied(true)
       setTimeout(() => setIsCopied(false), 2000)
     })
+  }
+
+  const handleApproveDraft = (d: EmailDraft) => {
+    setDraftStatus("approved")
+    onSendDraft?.(d, `Aprovado. Envie o email para ${d.to} com assunto "${d.subject}".`)
+  }
+
+  const handleDiscardDraft = () => {
+    setDraftStatus("discarded")
+    onSendDraft?.(draft!, "Descartado. Não envie o email.")
+  }
+
+  const handleRewriteDraft = () => {
+    onSendDraft?.(draft!, "Por favor, reescreva o rascunho do email.")
   }
 
   return (
@@ -43,14 +67,29 @@ export function AssistantMessage({
       </div>
 
       <div className="bg-card text-card-foreground relative overflow-hidden rounded-xl border">
-        <div className="prose dark:prose-invert prose-p:my-2 prose-pre:my-2 prose-pre:rounded-lg prose-pre:border prose-pre:bg-zinc-950 prose-pre:p-3 max-w-none p-4 text-[15px] leading-relaxed">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw, rehypeSanitize]}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
+        {textContent && (
+          <div className="prose dark:prose-invert prose-p:my-2 prose-pre:my-2 prose-pre:rounded-lg prose-pre:border prose-pre:bg-zinc-950 prose-pre:p-3 max-w-none p-4 text-[15px] leading-relaxed">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeRaw, rehypeSanitize]}
+            >
+              {textContent}
+            </ReactMarkdown>
+          </div>
+        )}
+
+        {draft && (
+          <div className="px-4 pb-4">
+            <EmailDraftCard
+              draft={draft}
+              status={draftStatus}
+              onApprove={handleApproveDraft}
+              onDiscard={handleDiscardDraft}
+              onRewrite={handleRewriteDraft}
+            />
+          </div>
+        )}
+
         <Button
           variant="ghost"
           size="icon"

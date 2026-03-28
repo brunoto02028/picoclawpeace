@@ -1581,8 +1581,12 @@ func (al *AgentLoop) handleReasoning(
 	}
 }
 
+// maxTurnDuration is the hard ceiling for a single agent turn regardless of
+// how many iterations or how long individual tool calls take.
+const maxTurnDuration = 20 * time.Minute
+
 func (al *AgentLoop) runTurn(ctx context.Context, ts *turnState) (turnResult, error) {
-	turnCtx, turnCancel := context.WithCancel(ctx)
+	turnCtx, turnCancel := context.WithTimeout(ctx, maxTurnDuration)
 	defer turnCancel()
 	ts.setTurnCancel(turnCancel)
 
@@ -1892,6 +1896,22 @@ turnLoop:
 				"tools_json":    formatToolsForLog(providerToolDefs),
 			})
 
+		// Acquire a channel streamer when the provider supports token streaming.
+		sp, canStream := ts.agent.Provider.(providers.StreamingProvider)
+		var streamOnChunk func(string)
+		var iterStreamer bus.Streamer
+		if canStream && ts.channel != "" && ts.chatID != "" {
+			if s, sOK := al.bus.GetStreamer(turnCtx, ts.channel, ts.chatID); sOK {
+				iterStreamer = s
+				iterStreamerRef := iterStreamer
+				streamOnChunk = func(acc string) {
+					al.emitEvent(EventKindLLMDelta, ts.eventMeta("runTurn", "turn.llm.delta"),
+						LLMDeltaPayload{ContentDeltaLen: len(acc)})
+					_ = iterStreamerRef.Update(turnCtx, acc)
+				}
+			}
+		}
+
 		callLLM := func(messagesForCall []providers.Message, toolDefsForCall []providers.ToolDefinition) (*providers.LLMResponse, error) {
 			providerCtx, providerCancel := context.WithCancel(turnCtx)
 			ts.setProviderCancel(providerCancel)
@@ -1924,6 +1944,9 @@ turnLoop:
 				}
 				return fbResult.Response, nil
 			}
+			if canStream && streamOnChunk != nil {
+				return sp.ChatStream(providerCtx, messagesForCall, toolDefsForCall, llmModel, llmOpts, streamOnChunk)
+			}
 			return ts.agent.Provider.Chat(providerCtx, messagesForCall, toolDefsForCall, llmModel, llmOpts)
 		}
 
@@ -1931,6 +1954,11 @@ turnLoop:
 		var err error
 		maxRetries := 2
 		for retry := 0; retry <= maxRetries; retry++ {
+			if retry > 0 && iterStreamer != nil {
+				iterStreamer.Cancel(turnCtx)
+				iterStreamer = nil
+				streamOnChunk = nil
+			}
 			response, err = callLLM(callMessages, providerToolDefs)
 			if err == nil {
 				break
@@ -2042,6 +2070,17 @@ turnLoop:
 				continue
 			}
 			break
+		}
+
+		// Finalize or cancel streaming placeholder after LLM call.
+		if iterStreamer != nil {
+			if err == nil && response != nil && response.Content != "" && len(response.ToolCalls) == 0 {
+				_ = iterStreamer.Finalize(turnCtx, response.Content)
+			} else {
+				iterStreamer.Cancel(turnCtx)
+			}
+			iterStreamer = nil
+			streamOnChunk = nil
 		}
 
 		if err != nil {

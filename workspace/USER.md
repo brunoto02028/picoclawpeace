@@ -1,21 +1,31 @@
 # User
 
-Information about the user goes here.
+## Personal Information
+
+- Name: Bruno
+- GitHub: brunoto02028 (https://github.com/brunoto02028)
+- Location: Brasil
+- Timezone: America/Sao_Paulo
+- Language: Português (BR)
 
 ## Preferences
 
-- Communication style: (casual/formal)
-- Timezone: (your timezone)
-- Language: (your preferred language)
+- Communication style: casual, direto ao ponto
+- Prefere respostas em português
+- Quer saber o que está sendo feito em tempo real (progress updates)
 
-## Personal Information
+## Development Context
 
-- Name: (optional)
-- Location: (optional)
-- Occupation: (optional)
+- Usa Windsurf como IDE principal
+- Repositórios ficam em `~/repos/`
+- Git configurado: Bruno <brunoto02028@users.noreply.github.com>
+- GitHub CLI (`gh`) autenticado como brunoto02028
+- Deploy preferencial: Netlify
+- Stack principal: Go (backend), React/TypeScript/Vite (frontend), pnpm
 
-## Learning Goals
+## Permissions Granted
 
-- What the user wants to learn from AI
-- Preferred interaction style
-- Areas of interest
+- Acesso total a todos os repositórios GitHub via `gh` CLI
+- Pode clonar, editar, commitar e fazer push
+- Pode abrir PRs e acompanhar CI/CD
+- Pode fazer deploy via Netlify CLI

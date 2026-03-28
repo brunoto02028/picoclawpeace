@@ -21,7 +21,7 @@ import (
 	_ "github.com/sipeed/picoclaw/pkg/channels/line"
 	_ "github.com/sipeed/picoclaw/pkg/channels/maixcam"
 	_ "github.com/sipeed/picoclaw/pkg/channels/onebot"
-	_ "github.com/sipeed/picoclaw/pkg/channels/pico"
+	picochan "github.com/sipeed/picoclaw/pkg/channels/pico"
 	_ "github.com/sipeed/picoclaw/pkg/channels/qq"
 	_ "github.com/sipeed/picoclaw/pkg/channels/slack"
 	_ "github.com/sipeed/picoclaw/pkg/channels/telegram"
@@ -164,6 +164,13 @@ func Run(debug bool, homePath, configPath string, allowEmptyStartup bool) error 
 	defer cancel()
 
 	go agentLoop.Run(ctx)
+
+	// Forward agent tool-execution events to connected pico WebSocket clients.
+	if picoChannel, ok := runningServices.ChannelManager.GetChannel("pico"); ok {
+		if pc, ok := picoChannel.(*picochan.PicoChannel); ok {
+			go watchAndForwardAgentEvents(ctx, agentLoop, pc)
+		}
+	}
 
 	var configReloadChan <-chan *config.Config
 	stopWatch := func() {}

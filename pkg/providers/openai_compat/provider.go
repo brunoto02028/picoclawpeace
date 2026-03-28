@@ -254,6 +254,7 @@ func parseStreamResponse(
 	onChunk func(accumulated string),
 ) (*LLMResponse, error) {
 	var textContent strings.Builder
+	var reasoningContent strings.Builder
 	var finishReason string
 	var usage *UsageInfo
 
@@ -286,8 +287,9 @@ func parseStreamResponse(
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content   string `json:"content"`
-					ToolCalls []struct {
+					Content          string `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
+					ToolCalls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Function *struct {
@@ -314,6 +316,14 @@ func parseStreamResponse(
 		}
 
 		choice := chunk.Choices[0]
+
+		// Stream reasoning tokens live (e.g. MiniMax reasoning_split:true)
+		if choice.Delta.ReasoningContent != "" && textContent.Len() == 0 {
+			reasoningContent.WriteString(choice.Delta.ReasoningContent)
+			if onChunk != nil {
+				onChunk("💭 " + reasoningContent.String())
+			}
+		}
 
 		// Accumulate text content
 		if choice.Delta.Content != "" {
@@ -379,10 +389,11 @@ func parseStreamResponse(
 	}
 
 	return &LLMResponse{
-		Content:      textContent.String(),
-		ToolCalls:    toolCalls,
-		FinishReason: finishReason,
-		Usage:        usage,
+		Content:          textContent.String(),
+		ReasoningContent: reasoningContent.String(),
+		ToolCalls:        toolCalls,
+		FinishReason:     finishReason,
+		Usage:            usage,
 	}, nil
 }
 

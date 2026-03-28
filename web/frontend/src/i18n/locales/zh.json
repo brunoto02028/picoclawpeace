@@ -1,5 +1,7 @@
 {
   "navigation": {
+    "overview": "概览",
+    "dashboard": "仪表板",
     "chat": "对话",
     "model_group": "模型",
     "models": "模型",
@@ -13,6 +15,39 @@
     "show_less_channels": "收起",
     "config": "配置",
     "logs": "日志"
+  },
+  "dashboard": {
+    "gateway": {
+      "title": "网关",
+      "running": "运行中",
+      "stopped": "已停止",
+      "starting": "启动中...",
+      "restarting": "重启中...",
+      "stopping": "停止中..."
+    },
+    "models": {
+      "configured": "已配置 {{count}} / {{total}} 个"
+    },
+    "channels": {
+      "available": "可用频道"
+    },
+    "sessions": {
+      "title": "会话",
+      "recent": "最近会话",
+      "recentTitle": "最近对话",
+      "startChat": "开始对话"
+    },
+    "quickActions": {
+      "title": "快捷操作",
+      "chat": "打开对话",
+      "chatDesc": "与 AI 助手开始或继续对话",
+      "models": "管理模型",
+      "modelsDesc": "配置 API 密钥和 AI 模型提供商",
+      "skills": "智能体技能",
+      "skillsDesc": "管理 AI 智能体的技能和工具",
+      "config": "系统设置",
+      "configDesc": "配置网关、频道和系统偏好设置"
+    }
   },
   "chat": {
     "welcome": "今天我能为您做些什么？",

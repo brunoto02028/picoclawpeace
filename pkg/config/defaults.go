@@ -39,8 +39,8 @@ func DefaultConfig() *Config {
 				SummarizeTokenPercent:     75,
 				SteeringMode:              "one-at-a-time",
 				ToolFeedback: ToolFeedbackConfig{
-					Enabled:       false,
-					MaxArgsLength: 300,
+					Enabled:       true,
+					MaxArgsLength: 400,
 				},
 				SplitOnMarker: false,
 			},
@@ -152,6 +152,10 @@ func DefaultConfig() *Config {
 				WriteTimeout:   10,
 				MaxConnections: 100,
 				AllowFrom:      FlexibleStringSlice{},
+				Placeholder: PlaceholderConfig{
+					Enabled: true,
+					Text:    FlexibleStringSlice{"…"},
+				},
 			},
 		},
 		Hooks: HooksConfig{
@@ -181,13 +185,6 @@ func DefaultConfig() *Config {
 				APIBase:   "https://api.openai.com/v1",
 			},
 
-			// Anthropic Claude - https://console.anthropic.com/settings/keys
-			{
-				ModelName: "claude-sonnet-4.6",
-				Model:     "anthropic/claude-sonnet-4.6",
-				APIBase:   "https://api.anthropic.com/v1",
-			},
-
 			// DeepSeek - https://platform.deepseek.com/
 			{
 				ModelName: "deepseek-chat",
@@ -214,13 +211,6 @@ func DefaultConfig() *Config {
 				ModelName: "moonshot-v1-8k",
 				Model:     "moonshot/moonshot-v1-8k",
 				APIBase:   "https://api.moonshot.cn/v1",
-			},
-
-			// Groq - https://console.groq.com/keys
-			{
-				ModelName: "llama-3.3-70b",
-				Model:     "groq/llama-3.3-70b-versatile",
-				APIBase:   "https://api.groq.com/openai/v1",
 			},
 
 			// OpenRouter (100+ models) - https://openrouter.ai/keys
@@ -318,8 +308,8 @@ func DefaultConfig() *Config {
 
 			// Minimax - https://api.minimaxi.com/
 			{
-				ModelName: "MiniMax-M2.5",
-				Model:     "minimax/MiniMax-M2.5",
+				ModelName: "MiniMax-M2.7",
+				Model:     "minimax/MiniMax-M2.7",
 				APIBase:   "https://api.minimaxi.com/v1",
 				ExtraBody: map[string]any{"reasoning_split": true},
 			},
