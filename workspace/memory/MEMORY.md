@@ -1,1 +1,0 @@
-The user asked about my skills
