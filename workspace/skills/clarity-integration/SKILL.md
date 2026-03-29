@@ -14,13 +14,30 @@ The repository to analyse and send proposals for is:
 Do NOT confuse this with other repos (e.g. `clinic`, `picoclawpeace`).
 Only analyse `homeledge` when the user asks for Clarity-related proposals.
 
+## Authentication — IMPORTANT
+**There is NO `clarity login` command. Do NOT ask Bruno for credentials.**
+The API key is already configured and ready to use in:
+`C:\Bruno Projetos\picoclawpeace\workspace\clarity-config.json`
+
+Read it with:
+```bash
+type "C:\Bruno Projetos\picoclawpeace\workspace\clarity-config.json"
+```
+Or on Linux/Mac:
+```bash
+cat ~/workspace/clarity-config.json
+```
+
+The `apiKey` field in that file is the Bearer token for all API calls.
+Pass it as: `Authorization: Bearer <value of apiKey field>`
+
 ## Config file
-Location: `~/workspace/clarity-config.json` (gitignored, never commit real keys)
+Location: `C:\Bruno Projetos\picoclawpeace\workspace\clarity-config.json` (gitignored, never commit real keys)
 
 ```json
 {
   "baseUrl": "https://clarityco.co.uk",
-  "apiKey": "picocloud_XXXXXXXXX",
+  "apiKey": "clr_live_picocloud_...",
   "webhookSecret": "XXXXXXXXX"
 }
 ```
