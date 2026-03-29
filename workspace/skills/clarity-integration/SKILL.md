@@ -5,6 +5,15 @@ Send code proposals from PicoCloud to Clarity & Co (clarityco.co.uk) for human r
 PicoCloud analyses the codebase locally, proposes improvements, and submits them via API.
 Bruno reviews and approves proposals in the Clarity HQ dashboard.
 
+## Target repository (Clarity codebase)
+The repository to analyse and send proposals for is:
+- **GitHub:** `https://github.com/brunoto02028/homeledge`
+- **Live site:** `https://clarityco.co.uk`
+- Clone locally with: `gh repo clone brunoto02028/homeledge ~/repos/homeledge`
+
+Do NOT confuse this with other repos (e.g. `clinic`, `picoclawpeace`).
+Only analyse `homeledge` when the user asks for Clarity-related proposals.
+
 ## Config file
 Location: `~/workspace/clarity-config.json` (gitignored, never commit real keys)
 
@@ -101,3 +110,10 @@ curl -s https://clarityco.co.uk/api/v1/picocloud/proposals/$PROPOSAL_ID \
 - Never include secrets or env values in `originalCode` or `proposedCode`
 - One proposal per file per submission (split multi-file changes)
 - `source` must always be `"picocloud"`
+
+## STRICT: Anti-hallucination rules (MUST follow)
+- **NEVER claim a proposal was submitted** unless the `curl` command actually ran and returned a real `proposal_id` (e.g. `prop_xxx`) in the JSON response. Show the raw response to Bruno.
+- **NEVER claim you pushed to GitHub** as part of this workflow. This skill does NOT involve `git push` or any GitHub commit. Proposals go to the Clarity API only.
+- **NEVER write a .md file and call it a "proposal"**. A proposal only exists when the Clarity API returns an `id`. A local file is not a proposal.
+- If the API call fails or returns an unexpected response (e.g. HTML, redirect, error), report the exact HTTP status and body to Bruno — do not pretend it succeeded.
+- If `clarity-config.json` is missing or the `apiKey` is still `picocloud_XXXXXXXXX`, stop and ask Bruno to configure the key before proceeding.
