@@ -9,7 +9,7 @@ export async function loadSessionMessages(
   const fallbackTime = detail.updated
 
   return detail.messages.map((message, index) => ({
-    id: `hist-${index}-${Date.now()}`,
+    id: `hist-${sessionId}-${index}`,
     role: message.role,
     content: message.content,
     timestamp: fallbackTime,

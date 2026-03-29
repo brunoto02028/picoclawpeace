@@ -7,6 +7,7 @@ import {
   loadSessionMessages,
   mergeHistoryMessages,
 } from "@/features/chat/history"
+
 import { type PicoMessage, handlePicoMessage } from "@/features/chat/protocol"
 import {
   clearStoredSessionId,
@@ -35,6 +36,7 @@ let reconnectTimer: number | null = null
 let reconnectAttempts = 0
 let shouldMaintainConnection = false
 let pingIntervalRef: number | null = null
+let hasConnectedOnce = false
 
 const PING_INTERVAL_MS = 15_000
 const PONG_TIMEOUT_MS  = 8_000
@@ -225,6 +227,34 @@ export async function connectChat() {
       reconnectAttempts = 0
       updateChatStore({ lastPongAt: Date.now() })
       startPingHeartbeat(socket, generation)
+
+      // On reconnect (not first connect), sync history to recover any messages
+      // that the backend delivered while the WebSocket was disconnected.
+      if (hasConnectedOnce) {
+        void loadSessionMessages(sessionId)
+          .then((historyMessages) => {
+            if (
+              !isCurrentSocket({
+                socket,
+                currentSocket: wsRef,
+                generation,
+                currentGeneration: connectionGeneration,
+                sessionId,
+                currentSessionId: activeSessionIdRef,
+              })
+            ) {
+              return
+            }
+            const current = getChatState()
+            if (current.activeSessionId !== sessionId) return
+            const merged = mergeHistoryMessages(historyMessages, current.messages)
+            if (merged.length !== current.messages.length) {
+              updateChatStore({ messages: merged, isTyping: false, agentBusyStartMs: null })
+            }
+          })
+          .catch(() => {})
+      }
+      hasConnectedOnce = true
     }
 
     socket.onmessage = (event) => {
@@ -516,9 +546,27 @@ export function initializeChatStore() {
   })
 }
 
+export async function refreshMessages(): Promise<boolean> {
+  const sessionId = activeSessionIdRef
+  try {
+    const historyMessages = await loadSessionMessages(sessionId)
+    const current = getChatState()
+    if (current.activeSessionId !== sessionId) return false
+    const merged = mergeHistoryMessages(historyMessages, current.messages)
+    if (merged.length !== current.messages.length) {
+      updateChatStore({ messages: merged, isTyping: false, agentBusyStartMs: null })
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function teardownChatStore() {
   unsubscribeGateway?.()
   unsubscribeGateway = null
   initialized = false
+  hasConnectedOnce = false
   disconnectChat()
 }

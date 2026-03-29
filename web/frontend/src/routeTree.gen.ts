@@ -12,10 +12,14 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as LogsRouteImport } from './routes/logs'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CredentialsRouteImport } from './routes/credentials'
+import { Route as ContasRouteImport } from './routes/contas'
 import { Route as ConfigRouteImport } from './routes/config'
+import { Route as CampanhasRouteImport } from './routes/campanhas'
 import { Route as AgentRouteImport } from './routes/agent'
+import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as ChannelsRouteRouteImport } from './routes/channels/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConfigRawRouteImport } from './routes/config.raw'
@@ -38,6 +42,11 @@ const LogsRoute = LogsRouteImport.update({
   path: '/logs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -48,14 +57,29 @@ const CredentialsRoute = CredentialsRouteImport.update({
   path: '/credentials',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ContasRoute = ContasRouteImport.update({
+  id: '/contas',
+  path: '/contas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ConfigRoute = ConfigRouteImport.update({
   id: '/config',
   path: '/config',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CampanhasRoute = CampanhasRouteImport.update({
+  id: '/campanhas',
+  path: '/campanhas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgentRoute = AgentRouteImport.update({
   id: '/agent',
   path: '/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ChannelsRouteRoute = ChannelsRouteRouteImport.update({
@@ -92,10 +116,14 @@ const AgentSkillsRoute = AgentSkillsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/channels': typeof ChannelsRouteRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/agent': typeof AgentRouteWithChildren
+  '/campanhas': typeof CampanhasRoute
   '/config': typeof ConfigRouteWithChildren
+  '/contas': typeof ContasRoute
   '/credentials': typeof CredentialsRoute
   '/dashboard': typeof DashboardRoute
+  '/insights': typeof InsightsRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/tasks': typeof TasksRoute
@@ -107,10 +135,14 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/channels': typeof ChannelsRouteRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/agent': typeof AgentRouteWithChildren
+  '/campanhas': typeof CampanhasRoute
   '/config': typeof ConfigRouteWithChildren
+  '/contas': typeof ContasRoute
   '/credentials': typeof CredentialsRoute
   '/dashboard': typeof DashboardRoute
+  '/insights': typeof InsightsRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/tasks': typeof TasksRoute
@@ -123,10 +155,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/channels': typeof ChannelsRouteRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/agent': typeof AgentRouteWithChildren
+  '/campanhas': typeof CampanhasRoute
   '/config': typeof ConfigRouteWithChildren
+  '/contas': typeof ContasRoute
   '/credentials': typeof CredentialsRoute
   '/dashboard': typeof DashboardRoute
+  '/insights': typeof InsightsRoute
   '/logs': typeof LogsRoute
   '/models': typeof ModelsRoute
   '/tasks': typeof TasksRoute
@@ -140,10 +176,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/channels'
+    | '/agenda'
     | '/agent'
+    | '/campanhas'
     | '/config'
+    | '/contas'
     | '/credentials'
     | '/dashboard'
+    | '/insights'
     | '/logs'
     | '/models'
     | '/tasks'
@@ -155,10 +195,14 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/channels'
+    | '/agenda'
     | '/agent'
+    | '/campanhas'
     | '/config'
+    | '/contas'
     | '/credentials'
     | '/dashboard'
+    | '/insights'
     | '/logs'
     | '/models'
     | '/tasks'
@@ -170,10 +214,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/channels'
+    | '/agenda'
     | '/agent'
+    | '/campanhas'
     | '/config'
+    | '/contas'
     | '/credentials'
     | '/dashboard'
+    | '/insights'
     | '/logs'
     | '/models'
     | '/tasks'
@@ -186,10 +234,14 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChannelsRouteRoute: typeof ChannelsRouteRouteWithChildren
+  AgendaRoute: typeof AgendaRoute
   AgentRoute: typeof AgentRouteWithChildren
+  CampanhasRoute: typeof CampanhasRoute
   ConfigRoute: typeof ConfigRouteWithChildren
+  ContasRoute: typeof ContasRoute
   CredentialsRoute: typeof CredentialsRoute
   DashboardRoute: typeof DashboardRoute
+  InsightsRoute: typeof InsightsRoute
   LogsRoute: typeof LogsRoute
   ModelsRoute: typeof ModelsRoute
   TasksRoute: typeof TasksRoute
@@ -218,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LogsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -232,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CredentialsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/contas': {
+      id: '/contas'
+      path: '/contas'
+      fullPath: '/contas'
+      preLoaderRoute: typeof ContasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/config': {
       id: '/config'
       path: '/config'
@@ -239,11 +305,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/campanhas': {
+      id: '/campanhas'
+      path: '/campanhas'
+      fullPath: '/campanhas'
+      preLoaderRoute: typeof CampanhasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agent': {
       id: '/agent'
       path: '/agent'
       fullPath: '/agent'
       preLoaderRoute: typeof AgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/channels': {
@@ -329,10 +409,14 @@ const ConfigRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChannelsRouteRoute: ChannelsRouteRouteWithChildren,
+  AgendaRoute: AgendaRoute,
   AgentRoute: AgentRouteWithChildren,
+  CampanhasRoute: CampanhasRoute,
   ConfigRoute: ConfigRouteWithChildren,
+  ContasRoute: ContasRoute,
   CredentialsRoute: CredentialsRoute,
   DashboardRoute: DashboardRoute,
+  InsightsRoute: InsightsRoute,
   LogsRoute: LogsRoute,
   ModelsRoute: ModelsRoute,
   TasksRoute: TasksRoute,

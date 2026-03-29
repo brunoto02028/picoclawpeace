@@ -13,7 +13,7 @@ import { TypingIndicator } from "@/components/chat/typing-indicator"
 import { UserMessage } from "@/components/chat/user-message"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { connectChat } from "@/features/chat/controller"
+import { connectChat, refreshMessages } from "@/features/chat/controller"
 import { detectBestAgent, AGENT_PROFILES } from "@/features/chat/agent-detector"
 import { useChatModels } from "@/hooks/use-chat-models"
 import { useGateway } from "@/hooks/use-gateway"
@@ -31,6 +31,7 @@ export function ChatPage() {
   const [suggestedAgent, setSuggestedAgent] = useState<{ name: string; label: string } | null>(null)
   const [lastUserMsg, setLastUserMsg] = useState<{ text: string; images: string[]; sentAt: number } | null>(null)
   const [silenceWarning, setSilenceWarning] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const {
     messages,
@@ -179,6 +180,21 @@ export function ChatPage() {
         }
       >
         <Button
+          variant="ghost"
+          size="sm"
+          disabled={isRefreshing}
+          onClick={() => {
+            setIsRefreshing(true)
+            void refreshMessages().finally(() => setIsRefreshing(false))
+          }}
+          className="h-9 gap-1.5 text-muted-foreground"
+          title="Sincronizar mensagens"
+        >
+          <IconRefresh className={`size-4 ${isRefreshing ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline text-xs">Atualizar</span>
+        </Button>
+
+        <Button
           variant="secondary"
           size="sm"
           onClick={newChat}
@@ -233,8 +249,21 @@ export function ChatPage() {
       {/* ── Banner de silêncio do agente ── */}
       {silenceWarning && connectionState === "connected" && (
         <div className="flex items-center justify-between gap-3 bg-amber-500/10 px-4 py-2 text-xs text-amber-600">
-          <span>⏳ O agente não respondeu ainda. Pode estar processando em background.</span>
+          <span>⏳ Aguardando resposta. O agente pode estar processando em background.</span>
           <div className="flex gap-2">
+            <button
+              disabled={isRefreshing}
+              onClick={() => {
+                setIsRefreshing(true)
+                void refreshMessages()
+                  .then((found) => { if (found) setSilenceWarning(false) })
+                  .finally(() => setIsRefreshing(false))
+              }}
+              className="flex items-center gap-1 rounded px-2 py-0.5 font-medium hover:bg-amber-500/10 disabled:opacity-50"
+            >
+              <IconRefresh className={`size-3 ${isRefreshing ? "animate-spin" : ""}`} />
+              Buscar resposta
+            </button>
             {lastUserMsg && (
               <button
                 onClick={() => {
@@ -245,7 +274,7 @@ export function ChatPage() {
                 }}
                 className="rounded px-2 py-0.5 font-medium hover:bg-amber-500/10"
               >
-                Reenviar mensagem
+                Reenviar
               </button>
             )}
             <button
