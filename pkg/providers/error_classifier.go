@@ -41,6 +41,8 @@ var (
 		rxp(`overloaded_error`),
 		rxp(`"type"\s*:\s*"overloaded_error"`),
 		substr("overloaded"),
+		substr("failed to call a function"),
+		substr("failed_generation"),
 	}
 
 	timeoutPatterns = []errorPattern{
@@ -146,7 +148,16 @@ func ClassifyError(err error, provider, model string) *FailoverError {
 
 	// Try HTTP status code extraction first.
 	if status := extractHTTPStatus(msg); status > 0 {
-		if reason := classifyByStatus(status); reason != "" {
+		reason := classifyByStatus(status)
+		if status == 400 {
+			// Some providers return transient model-generation failures as HTTP 400
+			// (e.g., function-calling failed_generation). Prefer message-based
+			// retriable classification when available.
+			if msgReason := classifyByMessage(msg); msgReason != "" && msgReason != FailoverFormat {
+				reason = msgReason
+			}
+		}
+		if reason != "" {
 			return &FailoverError{
 				Reason:   reason,
 				Provider: provider,

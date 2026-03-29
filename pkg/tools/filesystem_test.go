@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -365,6 +366,52 @@ func TestFilesystemTool_ListDir_DefaultPath(t *testing.T) {
 	// Should use "." as default path
 	if result.IsError {
 		t.Errorf("Expected success with default path '.', got IsError=true: %s", result.ForLLM)
+	}
+}
+
+func TestFilesystemTool_ListDir_MaxEntriesTruncatesOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	for i := 0; i < 5; i++ {
+		name := filepath.Join(tmpDir, "file"+strconv.Itoa(i)+".txt")
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatalf("failed to seed file: %v", err)
+		}
+	}
+
+	tool := NewListDirTool("", false)
+	result := tool.Execute(context.Background(), map[string]any{
+		"path":        tmpDir,
+		"max_entries": 2,
+	})
+
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "... 3 more entries omitted (showing 2/5)") {
+		t.Fatalf("expected truncation summary, got: %s", result.ForLLM)
+	}
+}
+
+func TestFilesystemTool_ListDir_MaxEntriesStringArg(t *testing.T) {
+	tmpDir := t.TempDir()
+	for i := 0; i < 4; i++ {
+		name := filepath.Join(tmpDir, "entry"+strconv.Itoa(i)+".txt")
+		if err := os.WriteFile(name, []byte("x"), 0o644); err != nil {
+			t.Fatalf("failed to seed file: %v", err)
+		}
+	}
+
+	tool := NewListDirTool("", false)
+	result := tool.Execute(context.Background(), map[string]any{
+		"path":        tmpDir,
+		"max_entries": "1",
+	})
+
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.ForLLM)
+	}
+	if !strings.Contains(result.ForLLM, "... 3 more entries omitted (showing 1/4)") {
+		t.Fatalf("expected string max_entries to be parsed, got: %s", result.ForLLM)
 	}
 }
 

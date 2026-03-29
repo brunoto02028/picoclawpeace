@@ -41,6 +41,24 @@ let hasConnectedOnce = false
 const PING_INTERVAL_MS = 15_000
 const PONG_TIMEOUT_MS  = 8_000
 
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error
+  }
+  try {
+    const serialized = JSON.stringify(error)
+    if (serialized && serialized !== "{}") {
+      return serialized
+    }
+  } catch {
+    // no-op
+  }
+  return "unknown error"
+}
+
 function startPingHeartbeat(socket: WebSocket, generation: number) {
   stopPingHeartbeat()
   pingIntervalRef = window.setInterval(() => {
@@ -392,14 +410,22 @@ export async function hydrateActiveSession() {
       })
     })
     .catch((error) => {
-      console.error("Failed to restore last session history:", error)
+      const reason = formatUnknownError(error)
+      console.warn(`[chat] Failed to restore last session history (${storedSessionId}): ${reason}`)
 
       const currentState = getChatState()
       if (currentState.activeSessionId !== storedSessionId) {
         return
       }
 
+      const sessionNotFound = /\b404\b/.test(reason) || /not found/i.test(reason)
+
       if (currentState.messages.length > 0) {
+        updateChatStore({ hasHydratedActiveSession: true })
+        return
+      }
+
+      if (!sessionNotFound) {
         updateChatStore({ hasHydratedActiveSession: true })
         return
       }

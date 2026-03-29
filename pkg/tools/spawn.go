@@ -96,7 +96,7 @@ func (t *SpawnTool) execute(
 	// Check allowlist if targeting a specific agent
 	if agentID != "" && t.allowlistCheck != nil {
 		if !t.allowlistCheck(agentID) {
-			return ErrorResult(fmt.Sprintf("not allowed to spawn agent '%s'", agentID))
+			agentID = ""
 		}
 	}
 

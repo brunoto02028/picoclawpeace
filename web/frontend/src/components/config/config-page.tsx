@@ -316,7 +316,7 @@ export function ConfigPage() {
           ) : (
             <div className="space-y-6">
               {isDirty && (
-                <div className="bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
+                <div className="bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
                   {t("pages.config.unsaved_changes")}
                 </div>
               )}

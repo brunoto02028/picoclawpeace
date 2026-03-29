@@ -36,6 +36,7 @@ export interface ChatStoreState {
   toolHistory: string[]
   liveLog: LiveLogEntry[]
   lastPongAt: number
+  lastAgentEventAt: number
   agentBusyStartMs: number | null
   activeSessionId: string
   hasHydratedActiveSession: boolean
@@ -51,6 +52,7 @@ const DEFAULT_CHAT_STATE: ChatStoreState = {
   toolHistory: [],
   liveLog: [],
   lastPongAt: Date.now(),
+  lastAgentEventAt: Date.now(),
   agentBusyStartMs: null,
   activeSessionId: getInitialActiveSessionId(),
   hasHydratedActiveSession: false,

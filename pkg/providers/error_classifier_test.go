@@ -12,6 +12,20 @@ func TestClassifyError_Nil(t *testing.T) {
 	if result != nil {
 		t.Errorf("expected nil for nil error, got %+v", result)
 	}
+	}
+
+func TestClassifyError_Status400FailedGenerationIsRetriable(t *testing.T) {
+	err := errors.New(`API request failed: Status: 400 Body: {"error":{"message":"Failed to call a function. See failed_generation."}}`)
+	result := ClassifyError(err, "openai", "llama-3.3-70b-versatile")
+	if result == nil {
+		t.Fatal("expected non-nil for status 400 failed_generation")
+	}
+	if result.Reason != FailoverRateLimit {
+		t.Fatalf("reason = %q, want %q", result.Reason, FailoverRateLimit)
+	}
+	if !result.IsRetriable() {
+		t.Fatal("failed_generation should be retriable for fallback")
+	}
 }
 
 func TestClassifyError_ContextCanceled(t *testing.T) {
@@ -95,6 +109,8 @@ func TestClassifyError_OverloadedPatterns(t *testing.T) {
 		"overloaded_error",
 		`{"type": "overloaded_error"}`,
 		"server is overloaded",
+		"Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.",
+		"failed_generation",
 	}
 
 	for _, msg := range patterns {

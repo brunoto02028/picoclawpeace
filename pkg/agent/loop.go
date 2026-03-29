@@ -1691,8 +1691,34 @@ func (al *AgentLoop) runTurn(ctx context.Context, ts *turnState) (turnResult, er
 	}
 
 	activeCandidates, activeModel := al.selectCandidates(ts.agent, ts.userMessage, messages)
+	if len(activeCandidates) > 0 {
+		activeCandidates = append([]providers.FallbackCandidate(nil), activeCandidates...)
+	}
 	pendingMessages := append([]providers.Message(nil), ts.opts.InitialSteeringMessages...)
 	var finalContent string
+	var lastToolForUser string
+	var lastToolForLLM string
+	var lastToolError string
+	isEmptyNoToolResponse := func(resp *providers.LLMResponse) bool {
+		if resp == nil {
+			return true
+		}
+		if len(resp.ToolCalls) > 0 {
+			return false
+		}
+		content := strings.TrimSpace(resp.Content)
+		if content == "" &&
+			strings.TrimSpace(resp.ReasoningContent) == "" &&
+			strings.TrimSpace(resp.Reasoning) == "" {
+			return true
+		}
+		// Detect echo: model returned the user's own message verbatim (common Groq failure mode)
+		userMsgNorm := strings.ToLower(strings.TrimSpace(ts.userMessage))
+		if userMsgNorm != "" && strings.ToLower(content) == userMsgNorm {
+			return true
+		}
+		return false
+	}
 
 turnLoop:
 	for ts.currentIteration() < ts.agent.MaxIterations || len(pendingMessages) > 0 || func() bool {
@@ -1953,14 +1979,57 @@ turnLoop:
 		var response *providers.LLMResponse
 		var err error
 		maxRetries := 2
+		retryToolDefs := providerToolDefs
 		for retry := 0; retry <= maxRetries; retry++ {
 			if retry > 0 && iterStreamer != nil {
 				iterStreamer.Cancel(turnCtx)
 				iterStreamer = nil
 				streamOnChunk = nil
 			}
-			response, err = callLLM(callMessages, providerToolDefs)
+			response, err = callLLM(callMessages, retryToolDefs)
 			if err == nil {
+				if isEmptyNoToolResponse(response) && retry < maxRetries {
+					backoff := time.Duration(retry+1) * time.Second
+					al.emitEvent(
+						EventKindLLMRetry,
+						ts.eventMeta("runTurn", "turn.llm.retry"),
+						LLMRetryPayload{
+							Attempt:    retry + 1,
+							MaxRetries: maxRetries,
+							Reason:     "empty_response",
+							Error:      "model returned empty response without tool calls",
+							Backoff:    backoff,
+						},
+					)
+					logger.WarnCF("agent", "Empty LLM response, retrying",
+						map[string]any{
+							"agent_id":    ts.agent.ID,
+							"iteration":   iteration,
+							"retry":       retry + 1,
+							"max_retries": maxRetries,
+							"backoff":     backoff.String(),
+						})
+					if len(activeCandidates) > 1 {
+						activeCandidates = append(activeCandidates[1:], activeCandidates[0])
+						logger.InfoCF("agent", "Rotating fallback candidates after empty response",
+							map[string]any{
+								"agent_id":      ts.agent.ID,
+								"iteration":     iteration,
+								"retry":         retry + 1,
+								"next_provider": activeCandidates[0].Provider,
+								"next_model":    activeCandidates[0].Model,
+							})
+					}
+					if sleepErr := sleepWithContext(turnCtx, backoff); sleepErr != nil {
+						if ts.hardAbortRequested() {
+							turnStatus = TurnEndStatusAborted
+							return al.abortTurn(ts)
+						}
+						err = sleepErr
+						break
+					}
+					continue
+				}
 				break
 			}
 			if ts.hardAbortRequested() && errors.Is(err, context.Canceled) {
@@ -1969,6 +2038,56 @@ turnLoop:
 			}
 
 			errMsg := strings.ToLower(err.Error())
+			isFailedFunctionCallError := strings.Contains(errMsg, "failed to call a function") ||
+				strings.Contains(errMsg, "failed_generation") ||
+				strings.Contains(errMsg, "tool call validation failed")
+
+			if isFailedFunctionCallError && retry < maxRetries {
+				backoff := time.Duration(retry+1) * time.Second
+				al.emitEvent(
+					EventKindLLMRetry,
+					ts.eventMeta("runTurn", "turn.llm.retry"),
+					LLMRetryPayload{
+						Attempt:    retry + 1,
+						MaxRetries: maxRetries,
+						Reason:     "tool_call_failed_generation",
+						Error:      err.Error(),
+						Backoff:    backoff,
+					},
+				)
+				if len(activeCandidates) > 1 {
+					activeCandidates = append(activeCandidates[1:], activeCandidates[0])
+					logger.WarnCF("agent", "Provider failed function-call generation, rotating candidate for retry",
+						map[string]any{
+							"agent_id":      ts.agent.ID,
+							"iteration":     iteration,
+							"retry":         retry + 1,
+							"max_retries":   maxRetries,
+							"backoff":       backoff.String(),
+							"next_provider": activeCandidates[0].Provider,
+							"next_model":    activeCandidates[0].Model,
+						})
+				} else {
+					logger.WarnCF("agent", "Provider failed function-call generation, retrying same candidate",
+						map[string]any{
+							"agent_id":    ts.agent.ID,
+							"iteration":   iteration,
+							"retry":       retry + 1,
+							"max_retries": maxRetries,
+							"backoff":     backoff.String(),
+						})
+				}
+				if sleepErr := sleepWithContext(turnCtx, backoff); sleepErr != nil {
+					if ts.hardAbortRequested() {
+						turnStatus = TurnEndStatusAborted
+						return al.abortTurn(ts)
+					}
+					err = sleepErr
+					break
+				}
+				continue
+			}
+
 			isTimeoutError := errors.Is(err, context.DeadlineExceeded) ||
 				strings.Contains(errMsg, "deadline exceeded") ||
 				strings.Contains(errMsg, "client.timeout") ||
@@ -2170,6 +2289,9 @@ turnLoop:
 			responseContent := response.Content
 			if responseContent == "" && response.ReasoningContent != "" {
 				responseContent = response.ReasoningContent
+			}
+			if responseContent == "" && response.Reasoning != "" {
+				responseContent = response.Reasoning
 			}
 			if steerMsgs := al.dequeueSteeringMessagesForScope(ts.sessionKey); len(steerMsgs) > 0 {
 				logger.InfoCF("agent", "Steering arrived after direct LLM response; continuing turn",
@@ -2530,6 +2652,20 @@ turnLoop:
 				contentForLLM = al.cfg.FilterSensitiveData(contentForLLM)
 			}
 
+			if strings.TrimSpace(toolResult.ForUser) != "" {
+				lastToolForUser = toolResult.ForUser
+			}
+			if strings.TrimSpace(contentForLLM) != "" {
+				lastToolForLLM = contentForLLM
+			}
+			if toolResult.IsError {
+				if strings.TrimSpace(toolResult.ForUser) != "" {
+					lastToolError = toolResult.ForUser
+				} else if strings.TrimSpace(contentForLLM) != "" {
+					lastToolError = contentForLLM
+				}
+			}
+
 			toolResultMsg := providers.Message{
 				Role:       "tool",
 				Content:    contentForLLM,
@@ -2708,6 +2844,18 @@ turnLoop:
 	if finalContent == "" {
 		if ts.currentIteration() >= ts.agent.MaxIterations && ts.agent.MaxIterations > 0 {
 			finalContent = toolLimitResponse
+		} else if strings.TrimSpace(lastToolError) != "" {
+			finalContent = fmt.Sprintf(
+				"Tool execution reported an error and no final model text was produced:\n%s",
+				utils.Truncate(lastToolError, 1200),
+			)
+		} else if strings.TrimSpace(lastToolForUser) != "" {
+			finalContent = utils.Truncate(lastToolForUser, 1200)
+		} else if strings.TrimSpace(lastToolForLLM) != "" {
+			finalContent = fmt.Sprintf(
+				"No final model text was produced, but tool output is available:\n%s",
+				utils.Truncate(lastToolForLLM, 1200),
+			)
 		} else {
 			finalContent = ts.opts.DefaultResponse
 		}

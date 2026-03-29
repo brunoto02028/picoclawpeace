@@ -55,7 +55,7 @@ export function formatMessageTime(dateRaw: number | string | Date): string {
 }
 
 export function usePicoChat() {
-  const { messages, connectionState, isTyping, currentTool, toolHistory, liveLog, agentBusyStartMs, activeSessionId, hasHydratedActiveSession } =
+  const { messages, connectionState, isTyping, currentTool, toolHistory, liveLog, lastAgentEventAt, agentBusyStartMs, activeSessionId, hasHydratedActiveSession } =
     useAtomValue(chatAtom)
 
   return {
@@ -65,6 +65,7 @@ export function usePicoChat() {
     currentTool,
     toolHistory,
     liveLog,
+    lastAgentEventAt,
     agentBusyStartMs,
     activeSessionId,
     hasHydratedActiveSession,

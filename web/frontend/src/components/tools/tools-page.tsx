@@ -96,9 +96,9 @@ export function ToolsPage() {
                             className={cn(
                               "gap-4 border transition-colors",
                               tool.status === "enabled" &&
-                                "border-emerald-200/70 bg-emerald-50/50",
+                                "border-emerald-300/50 bg-emerald-500/10 dark:border-emerald-400/30 dark:bg-emerald-500/15",
                               tool.status === "blocked" &&
-                                "border-amber-200/80 bg-amber-50/60",
+                                "border-amber-300/50 bg-amber-500/10 dark:border-amber-400/30 dark:bg-amber-500/15",
                               tool.status === "disabled" &&
                                 "border-border/60 bg-card/70",
                             )}
@@ -146,7 +146,7 @@ export function ToolsPage() {
                                 })}
                               </div>
                               {reasonText ? (
-                                <div className="text-sm text-amber-800">
+                                <div className="text-sm text-amber-700 dark:text-amber-300">
                                   {reasonText}
                                 </div>
                               ) : null}
@@ -179,8 +179,10 @@ function ToolStatusBadge({ status }: { status: ToolSupportItem["status"] }) {
     <span
       className={cn(
         "shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold",
-        status === "enabled" && "bg-emerald-100 text-emerald-700",
-        status === "blocked" && "bg-amber-100 text-amber-700",
+        status === "enabled" &&
+          "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+        status === "blocked" &&
+          "bg-amber-500/15 text-amber-700 dark:text-amber-300",
         status === "disabled" && "bg-muted text-muted-foreground",
       )}
     >

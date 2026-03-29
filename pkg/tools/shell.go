@@ -293,7 +293,7 @@ func (t *ExecTool) executeRun(ctx context.Context, args map[string]any) *ToolRes
 
 	if isPty {
 		if runtime.GOOS == "windows" {
-			return ErrorResult("PTY is not supported on Windows. Use background=true without pty.")
+			isPty = false
 		}
 	}
 

@@ -19,6 +19,7 @@ import { useChatModels } from "@/hooks/use-chat-models"
 import { useGateway } from "@/hooks/use-gateway"
 import { usePicoChat } from "@/hooks/use-pico-chat"
 import { useSessionHistory } from "@/hooks/use-session-history"
+import { updateChatStore } from "@/store/chat"
 
 export function ChatPage() {
   const { t } = useTranslation()
@@ -32,6 +33,7 @@ export function ChatPage() {
   const [lastUserMsg, setLastUserMsg] = useState<{ text: string; images: string[]; sentAt: number } | null>(null)
   const [silenceWarning, setSilenceWarning] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [busySeconds, setBusySeconds] = useState(0)
 
   const {
     messages,
@@ -40,6 +42,7 @@ export function ChatPage() {
     currentTool,
     toolHistory,
     liveLog,
+    lastAgentEventAt,
     agentBusyStartMs,
     activeSessionId,
     hasHydratedActiveSession,
@@ -63,6 +66,15 @@ export function ChatPage() {
     handleSetDefault,
   } = useChatModels({ isConnected: isGatewayRunning })
   const canSend = isChatConnected && Boolean(defaultModelName) && !isLoadingHistory
+  const isAgentWorking = (isTyping || !!currentTool || !!agentBusyStartMs) && connectionState === "connected"
+  const isLongTask = busySeconds >= 60
+
+  const formatBusy = (seconds: number) => {
+    if (seconds < 60) return `${seconds}s`
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return s > 0 ? `${m}m ${s}s` : `${m}m`
+  }
 
   const {
     sessions,
@@ -96,6 +108,21 @@ export function ChatPage() {
     }
   }, [messages, isTyping, isAtBottom])
 
+  useEffect(() => {
+    if (!agentBusyStartMs) {
+      setBusySeconds(0)
+      return
+    }
+
+    const tick = () => {
+      setBusySeconds(Math.max(0, Math.floor((Date.now() - agentBusyStartMs) / 1000)))
+    }
+
+    tick()
+    const timer = setInterval(tick, 1000)
+    return () => clearInterval(timer)
+  }, [agentBusyStartMs])
+
   // Silence detector: se o agente não responder em 20s após mensagem do usuário, avisa
   useEffect(() => {
     if (!lastUserMsg) return
@@ -103,9 +130,11 @@ export function ChatPage() {
       setSilenceWarning(false)
       return
     }
-    const lastAssistantTs = [...messages].reverse().find((m) => m.role === "assistant")?.timestamp
-    const agentRespondedAfter = lastAssistantTs ? Number(lastAssistantTs) : null
-    if (agentRespondedAfter && agentRespondedAfter > lastUserMsg.sentAt) {
+    // Use message-order check instead of timestamps (backend timestamps can be stale)
+    const lastUserIdx = messages.reduce<number>((acc, m, i) => (m.role === "user" ? i : acc), -1)
+    const hasAssistantAfterUser =
+      lastUserIdx >= 0 && messages.slice(lastUserIdx + 1).some((m) => m.role === "assistant")
+    if (hasAssistantAfterUser) {
       setSilenceWarning(false)
       setLastUserMsg(null)
       return
@@ -113,6 +142,41 @@ export function ChatPage() {
     const timer = setTimeout(() => setSilenceWarning(true), 20_000)
     return () => clearTimeout(timer)
   }, [lastUserMsg, isTyping, currentTool, agentBusyStartMs, messages])
+
+  useEffect(() => {
+    if (!isAgentWorking || connectionState !== "connected") {
+      return
+    }
+
+    const STALE_BUSY_MS = 90_000
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastAgentEventAt
+      if (idleMs < STALE_BUSY_MS) {
+        return
+      }
+
+      void refreshMessages().then((found) => {
+        if (found) {
+          return
+        }
+
+        updateChatStore((prev) => {
+          if (!prev.agentBusyStartMs) {
+            return {}
+          }
+          return {
+            isTyping: false,
+            currentTool: null,
+            toolHistory: [],
+            liveLog: [],
+            agentBusyStartMs: null,
+          }
+        })
+      })
+    }, 15_000)
+
+    return () => clearInterval(interval)
+  }, [isAgentWorking, connectionState, lastAgentEventAt])
 
   const handleSend = () => {
     if ((!input.trim() && images.length === 0) || !canSend) return
@@ -179,6 +243,16 @@ export function ChatPage() {
           )
         }
       >
+        {isAgentWorking && (
+          <div className="hidden items-center gap-2 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-700 dark:text-violet-300 md:flex">
+            <span className="inline-flex size-2 rounded-full bg-violet-500 animate-pulse" />
+            <span>
+              {currentTool ? `Executando: ${currentTool}` : "Processando tarefa"}
+            </span>
+            <span className="tabular-nums opacity-80">{busySeconds > 0 ? formatBusy(busySeconds) : "agora"}</span>
+          </div>
+        )}
+
         <Button
           variant="ghost"
           size="sm"
@@ -287,6 +361,39 @@ export function ChatPage() {
         </div>
       )}
 
+      {isAgentWorking && (
+        <div className="flex items-center justify-between gap-3 border-y border-violet-500/20 bg-violet-500/10 px-4 py-2 text-xs text-violet-700 dark:text-violet-300">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex size-2 rounded-full bg-violet-500 animate-pulse" />
+            <span>
+              {currentTool
+                ? `Agente executando ferramenta: ${currentTool}`
+                : "Agente pensando e preparando a resposta..."}
+            </span>
+          </div>
+          <span className="tabular-nums opacity-80">
+            {busySeconds > 0 ? `${busySeconds}s` : "agora"}
+          </span>
+        </div>
+      )}
+
+      {isAgentWorking && isLongTask && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <span>⏳ Tarefa longa em andamento. O agente continua ativo.</span>
+          <button
+            disabled={isRefreshing}
+            onClick={() => {
+              setIsRefreshing(true)
+              void refreshMessages().finally(() => setIsRefreshing(false))
+            }}
+            className="flex items-center gap-1 rounded px-2 py-0.5 font-medium hover:bg-amber-500/10 disabled:opacity-50"
+          >
+            <IconRefresh className={`size-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            Buscar resposta
+          </button>
+        </div>
+      )}
+
       <div
         ref={scrollRef}
         onScroll={handleScroll}
@@ -325,7 +432,7 @@ export function ChatPage() {
             </div>
           ))}
 
-          {(isTyping || !!currentTool || !!agentBusyStartMs) && (
+          {isAgentWorking && (
             <TypingIndicator
               currentTool={currentTool}
               busyStartMs={agentBusyStartMs}

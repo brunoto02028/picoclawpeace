@@ -20,6 +20,11 @@ import (
 
 const MaxReadFileSize = 64 * 1024 // 64KB limit to avoid context overflow
 
+const (
+	DefaultListDirMaxEntries = 200
+	MaxListDirMaxEntries     = 1000
+)
+
 func validatePathWithAllowPaths(path, workspace string, restrict bool, patterns []*regexp.Regexp) (string, error) {
 	if workspace == "" {
 		return path, fmt.Errorf("workspace is not defined")
@@ -575,6 +580,10 @@ func (t *ListDirTool) Parameters() map[string]any {
 				"type":        "string",
 				"description": "Path to list",
 			},
+			"max_entries": map[string]any{
+				"type":        "integer",
+				"description": "Optional max entries to return (default 200, max 1000)",
+			},
 		},
 		"required": []string{"path"},
 	}
@@ -586,23 +595,66 @@ func (t *ListDirTool) Execute(ctx context.Context, args map[string]any) *ToolRes
 		path = "."
 	}
 
+	maxEntries := parsePositiveIntArg(args["max_entries"], DefaultListDirMaxEntries)
+	if maxEntries > MaxListDirMaxEntries {
+		maxEntries = MaxListDirMaxEntries
+	}
+
 	entries, err := t.fs.ReadDir(path)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("failed to read directory: %v", err))
 	}
-	return formatDirEntries(entries)
+	return formatDirEntries(entries, maxEntries)
 }
 
-func formatDirEntries(entries []os.DirEntry) *ToolResult {
+func formatDirEntries(entries []os.DirEntry, maxEntries int) *ToolResult {
+	if maxEntries <= 0 {
+		maxEntries = DefaultListDirMaxEntries
+	}
+
 	var result strings.Builder
-	for _, entry := range entries {
+	total := len(entries)
+	if total == 0 {
+		return NewToolResult("(empty directory)")
+	}
+
+	shown := entries
+	if total > maxEntries {
+		shown = entries[:maxEntries]
+	}
+
+	for _, entry := range shown {
 		if entry.IsDir() {
 			result.WriteString("DIR:  " + entry.Name() + "\n")
 		} else {
 			result.WriteString("FILE: " + entry.Name() + "\n")
 		}
 	}
+
+	if total > len(shown) {
+		result.WriteString(fmt.Sprintf("... %d more entries omitted (showing %d/%d)\n", total-len(shown), len(shown), total))
+	}
+
 	return NewToolResult(result.String())
+}
+
+func parsePositiveIntArg(v any, fallback int) int {
+	switch n := v.(type) {
+	case int:
+		if n > 0 {
+			return n
+		}
+	case float64:
+		if n > 0 {
+			return int(n)
+		}
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(n))
+		if err == nil && i > 0 {
+			return i
+		}
+	}
+	return fallback
 }
 
 // fileSystem abstracts reading, writing, and listing files, allowing both

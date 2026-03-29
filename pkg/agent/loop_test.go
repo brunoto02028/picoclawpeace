@@ -881,6 +881,35 @@ func (m *simpleMockProvider) GetDefaultModel() string {
 	return "mock-model"
 }
 
+type sequencedMockProvider struct {
+	responses []providers.LLMResponse
+	calls     int
+}
+
+func (m *sequencedMockProvider) Chat(
+	ctx context.Context,
+	messages []providers.Message,
+	tools []providers.ToolDefinition,
+	model string,
+	opts map[string]any,
+) (*providers.LLMResponse, error) {
+	m.calls++
+	if len(m.responses) == 0 {
+		return &providers.LLMResponse{ToolCalls: []providers.ToolCall{}}, nil
+	}
+	idx := m.calls - 1
+	if idx >= len(m.responses) {
+		idx = len(m.responses) - 1
+	}
+	resp := m.responses[idx]
+	resp.ToolCalls = append([]providers.ToolCall(nil), resp.ToolCalls...)
+	return &resp, nil
+}
+
+func (m *sequencedMockProvider) GetDefaultModel() string {
+	return "sequenced-mock-model"
+}
+
 type reasoningContentProvider struct {
 	response         string
 	reasoningContent string
@@ -925,6 +954,33 @@ func (m *countingMockProvider) Chat(
 
 func (m *countingMockProvider) GetDefaultModel() string {
 	return "counting-mock-model"
+}
+
+type failedFunctionCallProvider struct {
+	calls      int
+	toolsCount []int
+}
+
+func (m *failedFunctionCallProvider) Chat(
+	ctx context.Context,
+	messages []providers.Message,
+	tools []providers.ToolDefinition,
+	model string,
+	opts map[string]any,
+) (*providers.LLMResponse, error) {
+	m.calls++
+	m.toolsCount = append(m.toolsCount, len(tools))
+	if m.calls == 1 {
+		return nil, fmt.Errorf("API request failed:\n  Status: 400\n  Body: {\"error\":{\"message\":\"Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.\"}}")
+	}
+	return &providers.LLMResponse{
+		Content:   "Resposta após retry.",
+		ToolCalls: []providers.ToolCall{},
+	}, nil
+}
+
+func (m *failedFunctionCallProvider) GetDefaultModel() string {
+	return "failed-function-call-model"
 }
 
 type handledMediaProvider struct {
@@ -1941,6 +1997,125 @@ func TestAgentLoop_EmptyModelResponseUsesAccurateFallback(t *testing.T) {
 	}
 	if response != defaultResponse {
 		t.Fatalf("response = %q, want %q", response, defaultResponse)
+	}
+}
+
+func TestAgentLoop_EmptyModelResponseRetriesBeforeFallback(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &sequencedMockProvider{responses: []providers.LLMResponse{
+		{Content: ""},
+		{Content: "Recovered after empty response"},
+	}}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	response, err := al.ProcessDirectWithChannel(context.Background(), "hello", "empty-response-retry", "test", "chat1")
+	if err != nil {
+		t.Fatalf("ProcessDirectWithChannel failed: %v", err)
+	}
+	if response != "Recovered after empty response" {
+		t.Fatalf("response = %q, want %q", response, "Recovered after empty response")
+	}
+	if provider.calls != 2 {
+		t.Fatalf("provider calls = %d, want 2", provider.calls)
+	}
+}
+
+func TestAgentLoop_EchoResponseTriggersRetry(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	const userInput = "hello"
+	msgBus := bus.NewMessageBus()
+	provider := &sequencedMockProvider{responses: []providers.LLMResponse{
+		{Content: userInput},
+		{Content: "Oi! Como posso ajudar?"},
+	}}
+	al := NewAgentLoop(cfg, msgBus, provider)
+
+	response, err := al.ProcessDirectWithChannel(context.Background(), userInput, "echo-retry", "test", "chat1")
+	if err != nil {
+		t.Fatalf("ProcessDirectWithChannel failed: %v", err)
+	}
+	if response != "Oi! Como posso ajudar?" {
+		t.Fatalf("response = %q, want recovered response after echo retry", response)
+	}
+	if provider.calls != 2 {
+		t.Fatalf("provider calls = %d, want 2 (echo on first, real response on second)", provider.calls)
+	}
+}
+
+func TestAgentLoop_RetriesWithoutToolsOnFailedGeneration(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "agent-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &config.Config{
+		Agents: config.AgentsConfig{
+			Defaults: config.AgentDefaults{
+				Workspace:         tmpDir,
+				ModelName:         "test-model",
+				MaxTokens:         4096,
+				MaxToolIterations: 3,
+			},
+		},
+	}
+
+	msgBus := bus.NewMessageBus()
+	provider := &failedFunctionCallProvider{}
+	al := NewAgentLoop(cfg, msgBus, provider)
+	al.RegisterTool(&mockCustomTool{})
+
+	response, err := al.ProcessDirectWithChannel(context.Background(), "hello", "failed-generation-retry", "test", "chat1")
+	if err != nil {
+		t.Fatalf("ProcessDirectWithChannel failed: %v", err)
+	}
+	if response != "Resposta após retry." {
+		t.Fatalf("response = %q, want %q", response, "Resposta após retry.")
+	}
+	if provider.calls != 2 {
+		t.Fatalf("provider calls = %d, want 2", provider.calls)
+	}
+	if len(provider.toolsCount) < 2 {
+		t.Fatalf("toolsCount len = %d, want >= 2", len(provider.toolsCount))
+	}
+	if provider.toolsCount[0] == 0 {
+		t.Fatalf("first attempt should include tools, got %d", provider.toolsCount[0])
+	}
+	if provider.toolsCount[1] == 0 {
+		t.Fatalf("retry should keep tools (no stripping), got 0 tools on second call")
 	}
 }
 

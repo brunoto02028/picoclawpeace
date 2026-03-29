@@ -15,6 +15,9 @@ interface AssistantMessageProps {
   onSendDraft?: (draft: EmailDraft, replyText: string) => void
 }
 
+const EMPTY_RESPONSE_TEXT =
+  "The model returned an empty response. This may indicate a provider error or token limit."
+
 export function AssistantMessage({
   content,
   timestamp = "",
@@ -27,9 +30,15 @@ export function AssistantMessage({
     timestamp !== "" ? formatMessageTime(timestamp) : ""
 
   const draft = parseEmailDraft(content)
+  const normalizedContent =
+    content.trim() === EMPTY_RESPONSE_TEXT
+      ? "Não veio texto final do modelo nesta tentativa. Já mantive o histórico salvo; clique em Atualizar ou envie novamente para continuar de onde parou."
+      : content
   const textContent = draft
-    ? content.replace(/\[EMAIL_DRAFT\][\s\S]*?\[\/EMAIL_DRAFT\]/i, "").trim()
-    : content
+    ? normalizedContent
+        .replace(/\[EMAIL_DRAFT\][\s\S]*?\[\/EMAIL_DRAFT\]/i, "")
+        .trim()
+    : normalizedContent
 
   const handleCopy = () => {
     navigator.clipboard.writeText(content).then(() => {
