@@ -68,6 +68,9 @@ web/backend/dist/*
 
 docker/data
 
+# Clarity integration config (contains API keys)
+workspace/clarity-config.json
+
 # Agent runtime workspaces
 workspace-*/
 workspace/state/

@@ -1,0 +1,5 @@
+{
+  "baseUrl": "https://clarityco.co.uk",
+  "apiKey": "picocloud_XXXXXXXXX",
+  "webhookSecret": "XXXXXXXXX"
+}
