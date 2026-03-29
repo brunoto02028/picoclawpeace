@@ -1,0 +1,572 @@
+import { getDefaultStore } from "jotai"
+import { toast } from "sonner"
+import i18n from "@/i18n"
+
+import { getPicoToken } from "@/api/pico"
+import {
+  loadSessionMessages,
+  mergeHistoryMessages,
+} from "@/features/chat/history"
+
+import { type PicoMessage, handlePicoMessage } from "@/features/chat/protocol"
+import {
+  clearStoredSessionId,
+  generateSessionId,
+  readStoredSessionId,
+} from "@/features/chat/state"
+import {
+  invalidateSocket,
+  isCurrentSocket,
+  normalizeWsUrlForBrowser,
+} from "@/features/chat/websocket"
+import { getChatState, updateChatStore } from "@/store/chat"
+import { type GatewayState, gatewayAtom } from "@/store/gateway"
+
+const store = getDefaultStore()
+
+let wsRef: WebSocket | null = null
+let isConnecting = false
+let msgIdCounter = 0
+let activeSessionIdRef = getChatState().activeSessionId
+let initialized = false
+let unsubscribeGateway: (() => void) | null = null
+let hydratePromise: Promise<void> | null = null
+let connectionGeneration = 0
+let reconnectTimer: number | null = null
+let reconnectAttempts = 0
+let shouldMaintainConnection = false
+let pingIntervalRef: number | null = null
+let hasConnectedOnce = false
+
+const PING_INTERVAL_MS = 15_000
+const PONG_TIMEOUT_MS  = 8_000
+
+function startPingHeartbeat(socket: WebSocket, generation: number) {
+  stopPingHeartbeat()
+  pingIntervalRef = window.setInterval(() => {
+    if (!wsRef || wsRef !== socket || connectionGeneration !== generation) {
+      stopPingHeartbeat()
+      return
+    }
+    if (wsRef.readyState !== WebSocket.OPEN) {
+      stopPingHeartbeat()
+      return
+    }
+    try {
+      wsRef.send(JSON.stringify({ type: "ping", id: `ping-${Date.now()}` }))
+    } catch {
+      stopPingHeartbeat()
+      return
+    }
+    // Check for pong response after timeout
+    window.setTimeout(() => {
+      if (connectionGeneration !== generation) return
+      if (Date.now() - getChatState().lastPongAt > PING_INTERVAL_MS + PONG_TIMEOUT_MS) {
+        console.warn("[chat] Pong timeout — reconnecting")
+        stopPingHeartbeat()
+        disconnectChatInternal({ clearDesiredConnection: false })
+        void connectChat()
+      }
+    }, PONG_TIMEOUT_MS)
+  }, PING_INTERVAL_MS)
+}
+
+function stopPingHeartbeat() {
+  if (pingIntervalRef !== null) {
+    clearInterval(pingIntervalRef)
+    pingIntervalRef = null
+  }
+}
+
+function clearReconnectTimer() {
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+}
+
+function shouldReconnectFor(generation: number, sessionId: string): boolean {
+  return (
+    shouldMaintainConnection &&
+    generation === connectionGeneration &&
+    sessionId === activeSessionIdRef &&
+    store.get(gatewayAtom).status === "running"
+  )
+}
+
+function scheduleReconnect(generation: number, sessionId: string) {
+  if (!shouldReconnectFor(generation, sessionId) || reconnectTimer !== null) {
+    return
+  }
+
+  const delay = Math.min(1000 * 2 ** reconnectAttempts, 5000)
+  reconnectAttempts += 1
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null
+    if (!shouldReconnectFor(generation, sessionId)) {
+      return
+    }
+    void connectChat()
+  }, delay)
+}
+
+function needsActiveSessionHydration(): boolean {
+  const state = getChatState()
+  const storedSessionId = readStoredSessionId()
+
+  return Boolean(
+    storedSessionId &&
+    storedSessionId === state.activeSessionId &&
+    !state.hasHydratedActiveSession,
+  )
+}
+
+function setActiveSessionId(sessionId: string) {
+  activeSessionIdRef = sessionId
+  updateChatStore({ activeSessionId: sessionId })
+}
+
+function disconnectChatInternal({
+  clearDesiredConnection,
+}: {
+  clearDesiredConnection: boolean
+}) {
+  connectionGeneration += 1
+  clearReconnectTimer()
+
+  if (clearDesiredConnection) {
+    shouldMaintainConnection = false
+  }
+
+  const socket = wsRef
+  wsRef = null
+  isConnecting = false
+
+  invalidateSocket(socket)
+
+  const { agentBusyStartMs } = getChatState()
+  if (agentBusyStartMs) {
+    toast.warning("⚠️ Conexão perdida durante uma tarefa em andamento. O agente pode ter continuado em background.", {
+      duration: 10000,
+    })
+  }
+  updateChatStore({
+    connectionState: "disconnected",
+    isTyping: false,
+    currentTool: null,
+    toolHistory: [],
+    agentBusyStartMs: null,
+  })
+}
+
+export async function connectChat() {
+  if (
+    store.get(gatewayAtom).status !== "running" ||
+    needsActiveSessionHydration()
+  ) {
+    return
+  }
+
+  if (
+    isConnecting ||
+    (wsRef &&
+      (wsRef.readyState === WebSocket.OPEN ||
+        wsRef.readyState === WebSocket.CONNECTING))
+  ) {
+    return
+  }
+
+  const generation = connectionGeneration + 1
+  connectionGeneration = generation
+  isConnecting = true
+  clearReconnectTimer()
+  updateChatStore({ connectionState: "connecting" })
+
+  try {
+    const { token, ws_url } = await getPicoToken()
+    const sessionId = activeSessionIdRef
+
+    if (generation !== connectionGeneration) {
+      isConnecting = false
+      return
+    }
+
+    if (!token) {
+      console.error("No pico token available")
+      updateChatStore({ connectionState: "error" })
+      isConnecting = false
+      scheduleReconnect(generation, sessionId)
+      return
+    }
+
+    const finalWsUrl = normalizeWsUrlForBrowser(ws_url)
+    const url = `${finalWsUrl}?session_id=${encodeURIComponent(sessionId)}`
+    const socket = new WebSocket(url, [`token.${token}`])
+
+    if (generation !== connectionGeneration) {
+      isConnecting = false
+      invalidateSocket(socket)
+      return
+    }
+
+    socket.onopen = () => {
+      if (
+        !isCurrentSocket({
+          socket,
+          currentSocket: wsRef,
+          generation,
+          currentGeneration: connectionGeneration,
+          sessionId,
+          currentSessionId: activeSessionIdRef,
+        })
+      ) {
+        return
+      }
+      updateChatStore({ connectionState: "connected" })
+      isConnecting = false
+      reconnectAttempts = 0
+      updateChatStore({ lastPongAt: Date.now() })
+      startPingHeartbeat(socket, generation)
+
+      // On reconnect (not first connect), sync history to recover any messages
+      // that the backend delivered while the WebSocket was disconnected.
+      if (hasConnectedOnce) {
+        void loadSessionMessages(sessionId)
+          .then((historyMessages) => {
+            if (
+              !isCurrentSocket({
+                socket,
+                currentSocket: wsRef,
+                generation,
+                currentGeneration: connectionGeneration,
+                sessionId,
+                currentSessionId: activeSessionIdRef,
+              })
+            ) {
+              return
+            }
+            const current = getChatState()
+            if (current.activeSessionId !== sessionId) return
+            const merged = mergeHistoryMessages(historyMessages, current.messages)
+            if (merged.length !== current.messages.length) {
+              updateChatStore({ messages: merged, isTyping: false, agentBusyStartMs: null })
+            }
+          })
+          .catch(() => {})
+      }
+      hasConnectedOnce = true
+    }
+
+    socket.onmessage = (event) => {
+      if (
+        !isCurrentSocket({
+          socket,
+          currentSocket: wsRef,
+          generation,
+          currentGeneration: connectionGeneration,
+          sessionId,
+          currentSessionId: activeSessionIdRef,
+        })
+      ) {
+        return
+      }
+
+      try {
+        const message = JSON.parse(event.data) as PicoMessage
+        handlePicoMessage(message, sessionId)
+      } catch {
+        console.warn("Non-JSON message from pico:", event.data)
+      }
+    }
+
+    socket.onclose = () => {
+      if (
+        !isCurrentSocket({
+          socket,
+          currentSocket: wsRef,
+          generation,
+          currentGeneration: connectionGeneration,
+          sessionId,
+          currentSessionId: activeSessionIdRef,
+        })
+      ) {
+        return
+      }
+      stopPingHeartbeat()
+      wsRef = null
+      isConnecting = false
+      const { agentBusyStartMs } = getChatState()
+      if (agentBusyStartMs) {
+        toast.warning("⚠️ Conexão perdida durante uma tarefa em andamento. O agente pode ter continuado em background.", {
+          duration: 10000,
+        })
+      }
+      updateChatStore({
+        connectionState: "disconnected",
+        isTyping: false,
+        currentTool: null,
+        toolHistory: [],
+        liveLog: [],
+        agentBusyStartMs: null,
+      })
+      scheduleReconnect(generation, sessionId)
+    }
+
+    socket.onerror = () => {
+      if (
+        !isCurrentSocket({
+          socket,
+          currentSocket: wsRef,
+          generation,
+          currentGeneration: connectionGeneration,
+          sessionId,
+          currentSessionId: activeSessionIdRef,
+        })
+      ) {
+        return
+      }
+      stopPingHeartbeat()
+      isConnecting = false
+      updateChatStore({ connectionState: "error" })
+      scheduleReconnect(generation, sessionId)
+    }
+
+    wsRef = socket
+  } catch (error) {
+    if (generation !== connectionGeneration) {
+      isConnecting = false
+      return
+    }
+    console.error("Failed to connect to pico:", error)
+    updateChatStore({ connectionState: "error" })
+    isConnecting = false
+    scheduleReconnect(generation, activeSessionIdRef)
+  }
+}
+
+export function disconnectChat() {
+  disconnectChatInternal({ clearDesiredConnection: true })
+}
+
+export async function hydrateActiveSession() {
+  if (hydratePromise) {
+    return hydratePromise
+  }
+
+  const state = getChatState()
+  const storedSessionId = readStoredSessionId()
+
+  if (
+    !storedSessionId ||
+    state.hasHydratedActiveSession ||
+    storedSessionId !== state.activeSessionId
+  ) {
+    if (!state.hasHydratedActiveSession) {
+      updateChatStore({ hasHydratedActiveSession: true })
+    }
+    return
+  }
+
+  hydratePromise = loadSessionMessages(storedSessionId)
+    .then((historyMessages) => {
+      const currentState = getChatState()
+      if (currentState.activeSessionId !== storedSessionId) {
+        return
+      }
+
+      if (currentState.messages.length > 0) {
+        updateChatStore({
+          messages: mergeHistoryMessages(
+            historyMessages,
+            currentState.messages,
+          ),
+          hasHydratedActiveSession: true,
+        })
+        return
+      }
+
+      updateChatStore({
+        messages: historyMessages,
+        isTyping: false,
+        hasHydratedActiveSession: true,
+      })
+    })
+    .catch((error) => {
+      console.error("Failed to restore last session history:", error)
+
+      const currentState = getChatState()
+      if (currentState.activeSessionId !== storedSessionId) {
+        return
+      }
+
+      if (currentState.messages.length > 0) {
+        updateChatStore({ hasHydratedActiveSession: true })
+        return
+      }
+
+      clearStoredSessionId()
+      updateChatStore({
+        messages: [],
+        isTyping: false,
+        hasHydratedActiveSession: true,
+      })
+    })
+    .finally(() => {
+      hydratePromise = null
+    })
+
+  return hydratePromise
+}
+
+export function sendChatMessage(content: string, media?: string[]) {
+  if (!wsRef || wsRef.readyState !== WebSocket.OPEN) {
+    console.warn("WebSocket not connected")
+    return false
+  }
+
+  const socket = wsRef
+  const id = `msg-${++msgIdCounter}-${Date.now()}`
+  const mediaList = media && media.length > 0 ? media : undefined
+
+  updateChatStore((prev) => ({
+    messages: [
+      ...prev.messages,
+      { id, role: "user", content, timestamp: Date.now(), media: mediaList },
+    ],
+    isTyping: true,
+  }))
+
+  try {
+    socket.send(
+      JSON.stringify({
+        type: "message.send",
+        id,
+        payload: { content, ...(mediaList ? { media: mediaList } : {}) },
+      }),
+    )
+    return true
+  } catch (error) {
+    console.error("Failed to send pico message:", error)
+    updateChatStore((prev) => ({
+      messages: prev.messages.filter((message) => message.id !== id),
+      isTyping: false,
+    }))
+    return false
+  }
+}
+
+export async function switchChatSession(sessionId: string) {
+  if (sessionId === activeSessionIdRef) {
+    return
+  }
+
+  try {
+    const historyMessages = await loadSessionMessages(sessionId)
+
+    disconnectChatInternal({ clearDesiredConnection: false })
+    setActiveSessionId(sessionId)
+    updateChatStore({
+      messages: historyMessages,
+      isTyping: false,
+      hasHydratedActiveSession: true,
+    })
+
+    if (store.get(gatewayAtom).status === "running") {
+      shouldMaintainConnection = true
+      await connectChat()
+    }
+  } catch (error) {
+    console.error("Failed to load session history:", error)
+    toast.error(i18n.t("chat.historyOpenFailed"))
+  }
+}
+
+export async function newChatSession() {
+  if (getChatState().messages.length === 0) {
+    return
+  }
+
+  disconnectChatInternal({ clearDesiredConnection: false })
+  setActiveSessionId(generateSessionId())
+  updateChatStore({
+    messages: [],
+    isTyping: false,
+    hasHydratedActiveSession: true,
+  })
+
+  if (store.get(gatewayAtom).status === "running") {
+    shouldMaintainConnection = true
+    await connectChat()
+  }
+}
+
+export function initializeChatStore() {
+  if (initialized) {
+    return
+  }
+
+  initialized = true
+  activeSessionIdRef = getChatState().activeSessionId
+  let lastGatewayStatus: GatewayState | null = null
+
+  const syncConnectionWithGateway = (force: boolean = false) => {
+    const gatewayStatus = store.get(gatewayAtom).status
+    if (!force && gatewayStatus === lastGatewayStatus) {
+      return
+    }
+    lastGatewayStatus = gatewayStatus
+
+    if (gatewayStatus === "running") {
+      shouldMaintainConnection = true
+      if (needsActiveSessionHydration()) {
+        return
+      }
+      void connectChat()
+      return
+    }
+
+    if (gatewayStatus === "stopped" || gatewayStatus === "error") {
+      disconnectChatInternal({ clearDesiredConnection: true })
+    }
+  }
+
+  unsubscribeGateway = store.sub(gatewayAtom, syncConnectionWithGateway)
+
+  if (!readStoredSessionId()) {
+    updateChatStore({ hasHydratedActiveSession: true })
+    syncConnectionWithGateway(true)
+    return
+  }
+
+  void hydrateActiveSession().finally(() => {
+    if (!initialized) {
+      return
+    }
+    syncConnectionWithGateway(true)
+  })
+}
+
+export async function refreshMessages(): Promise<boolean> {
+  const sessionId = activeSessionIdRef
+  try {
+    const historyMessages = await loadSessionMessages(sessionId)
+    const current = getChatState()
+    if (current.activeSessionId !== sessionId) return false
+    const merged = mergeHistoryMessages(historyMessages, current.messages)
+    if (merged.length !== current.messages.length) {
+      updateChatStore({ messages: merged, isTyping: false, agentBusyStartMs: null })
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+export function teardownChatStore() {
+  unsubscribeGateway?.()
+  unsubscribeGateway = null
+  initialized = false
+  hasConnectedOnce = false
+  disconnectChat()
+}

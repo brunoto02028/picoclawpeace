@@ -1,0 +1,71 @@
+{
+  "version": "1.0",
+  "data_criacao": "2026-03-27T21:30:00Z",
+  "owner": "Bruno",
+  "tasks": [
+    {
+      "id": 1,
+      "titulo": "Resolver Railway Build Failed",
+      "categoria": "email",
+      "conta": "brunoto02028@gmail.com",
+      "descricao": "Build falhou para projeto outstanding-mercy - verificar logs",
+      "prioridade": "alta",
+      "urgente": true,
+      "status": "pendente",
+      "data_criacao": "2026-03-27",
+      "deadline": "2026-03-27"
+    },
+    {
+      "id": 2,
+      "titulo": "Confirmar AxiCorp Daily",
+      "categoria": "email",
+      "conta": "brunotoaz@gmail.com",
+      "descricao": "Daily confirmation AxiCorp - requer confirmacao",
+      "prioridade": "alta",
+      "urgente": true,
+      "status": "pendente",
+      "data_criacao": "2026-03-27",
+      "deadline": "2026-03-27"
+    },
+    {
+      "id": 3,
+      "titulo": "Pagar Invoice 145307 CelticSMR",
+      "categoria": "financeiro",
+      "conta": "brunophysicalrehabilitation.co.uk",
+      "descricao": "Fatura pendente de Fevereiro 2026 - pode ter juros",
+      "prioridade": "alta",
+      "urgente": true,
+      "status": "pendente",
+      "data_criacao": "2026-03-27",
+      "deadline": "2026-03-27"
+    },
+    {
+      "id": 4,
+      "titulo": "Organizar pastas de email",
+      "categoria": "admin",
+      "descricao": "Criar pastas ScottishPower, Octopus e organizar por mes",
+      "prioridade": "media",
+      "urgente": false,
+      "status": "pendente",
+      "data_criacao": "2026-03-27",
+      "deadline": "2026-03-31"
+    },
+    {
+      "id": 5,
+      "titulo": "Verificar senhas expiram",
+      "categoria": "senhas",
+      "descricao": "Checar quais senhas expiram em 30 dias",
+      "prioridade": "media",
+      "urgente": false,
+      "status": "pendente",
+      "data_criacao": "2026-03-27",
+      "deadline": "2026-04-05"
+    }
+  ],
+  "estatisticas": {
+    "total": 5,
+    "urgentes": 3,
+    "pendentes": 5,
+    "concluidas": 0
+  }
+}

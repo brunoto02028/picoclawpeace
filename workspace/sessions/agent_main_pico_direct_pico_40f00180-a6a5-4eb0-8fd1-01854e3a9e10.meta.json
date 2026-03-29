@@ -1,0 +1,8 @@
+{
+  "key": "agent:main:pico:direct:pico:40f00180-a6a5-4eb0-8fd1-01854e3a9e10",
+  "summary": "## Resumo da Conversa\n\n**Contexto:** Usuário trabalha em um projeto chamado \"picoclawpeace\" (Node.js/pnpm). O assistente pode editar arquivos, rodar `pnpm dev` e verificar erros no console, mas não consegue controlar diretamente o IDE Windsurf.\n\n**Objetivo atual do usuário:**\n1. ✅ **Revisão completa do sistema** — verificar se tudo está funcional, cada botão, conexão, etc.\n2. ⏳ **Ajustes pós-revisão** — corrigir problemas encontrados\n3. ⏳ **Integração com API da Meta** — testar conexão com Instagram\n\n**Status:** O assistente iniciou a revisão do código e está analisando a estrutura do projeto. A conversa foi comprimida por limite de contexto (12 mensagens mais antigas foram descartadas), mas o foco permanece na revisão sistemática e preparação para integração com Meta API.\n\n[Emergency compression dropped 39 oldest messages due to context limit]",
+  "skip": 0,
+  "count": 9,
+  "created_at": "2026-03-28T06:23:32.498307Z",
+  "updated_at": "2026-03-28T16:57:14.626212Z"
+}
