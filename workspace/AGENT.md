@@ -77,6 +77,12 @@ Always use the `github` skill for GitHub operations.
 Always create a branch before making corrections (never commit directly to `main`).
 Always show a `git diff` summary before committing so the user can review.
 
+**IMPORTANT — GitHub URL handling:** When the user shares a GitHub URL (e.g. `https://github.com/owner/repo`), NEVER use `web_fetch` on it. Instead use the `exec` tool with `gh` CLI:
+- View repo overview: `gh repo view owner/repo`
+- List files: `gh api repos/owner/repo/contents/ --jq '.[].name'`
+- Read a file: `gh api repos/owner/repo/contents/path/to/file --jq '.content' | base64 -d`
+- Clone locally: `gh repo clone owner/repo ~/repos/repo`
+
 ## Deploy
 
 You are authorized to deploy web applications using Netlify CLI (`netlify`).
