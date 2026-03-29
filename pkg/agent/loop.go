@@ -2067,6 +2067,18 @@ turnLoop:
 							"next_provider": activeCandidates[0].Provider,
 							"next_model":    activeCandidates[0].Model,
 						})
+				} else if retry == maxRetries-1 && len(retryToolDefs) > 0 {
+					// Last resort: single candidate keeps failing — strip tools so the
+					// model can still produce a plain-text response on the final attempt.
+					retryToolDefs = nil
+					logger.WarnCF("agent", "Provider failed function-call generation, stripping tools for last-resort retry",
+						map[string]any{
+							"agent_id":    ts.agent.ID,
+							"iteration":   iteration,
+							"retry":       retry + 1,
+							"max_retries": maxRetries,
+							"backoff":     backoff.String(),
+						})
 				} else {
 					logger.WarnCF("agent", "Provider failed function-call generation, retrying same candidate",
 						map[string]any{
