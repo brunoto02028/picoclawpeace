@@ -67,3 +67,13 @@ web/backend/dist/*
 .claude/
 
 docker/data
+
+# Agent runtime workspaces
+workspace-*/
+workspace/state/
+workspace/heartbeat.log
+
+# Runtime logs
+pico_stdout.log
+pico_stderr.log
+node_modules/
