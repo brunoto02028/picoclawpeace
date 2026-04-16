@@ -1,5 +1,5 @@
 // Componente Sidebar de Navegação
-import { LayoutDashboard, Calendar, Target, Lightbulb, Settings, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Calendar, Target, Lightbulb, Settings, Menu, X, LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 
 interface SidebarProps {
@@ -12,6 +12,7 @@ const menuItems = [
   { id: 'agenda', label: 'Agenda', icon: Calendar },
   { id: 'campanhas', label: 'Campanhas', icon: Target },
   { id: 'insights', label: 'Insights', icon: Lightbulb },
+  { id: 'preview', label: 'Preview', icon: LayoutGrid },
 ];
 
 const channels = [

@@ -5,8 +5,9 @@ import { Dashboard } from './pages/Dashboard';
 import { Agenda } from './pages/Agenda';
 import { Campanhas } from './pages/Campanhas';
 import { Insights } from './pages/Insights';
+import { Preview } from './pages/Preview';
 
-type Page = 'dashboard' | 'agenda' | 'campanhas' | 'insights';
+type Page = 'dashboard' | 'agenda' | 'campanhas' | 'insights' | 'preview';
 
 function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -21,6 +22,8 @@ function App() {
         return <Campanhas />;
       case 'insights':
         return <Insights />;
+      case 'preview':
+        return <Preview />;
       default:
         return <Dashboard />;
     }
