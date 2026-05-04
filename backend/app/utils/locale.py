@@ -27,14 +27,14 @@ def set_locale(locale: str):
 
 def get_locale() -> str:
     if has_request_context():
-        raw = request.headers.get('Accept-Language', 'zh')
-        return raw if raw in _translations else 'zh'
-    return getattr(_thread_local, 'locale', 'zh')
+        raw = request.headers.get('Accept-Language', 'en')
+        return raw if raw in _translations else 'en'
+    return getattr(_thread_local, 'locale', 'en')
 
 
 def t(key: str, **kwargs) -> str:
     locale = get_locale()
-    messages = _translations.get(locale, _translations.get('zh', {}))
+    messages = _translations.get(locale, _translations.get('en', {}))
 
     value = messages
     for part in key.split('.'):
@@ -45,7 +45,7 @@ def t(key: str, **kwargs) -> str:
             break
 
     if value is None:
-        value = _translations.get('zh', {})
+        value = _translations.get('en', {})
         for part in key.split('.'):
             if isinstance(value, dict):
                 value = value.get(part)
@@ -65,5 +65,18 @@ def t(key: str, **kwargs) -> str:
 
 def get_language_instruction() -> str:
     locale = get_locale()
-    lang_config = _languages.get(locale, _languages.get('zh', {}))
-    return lang_config.get('llmInstruction', '请使用中文回答。')
+    lang_config = _languages.get(locale, _languages.get('en', {}))
+    base = lang_config.get('llmInstruction', 'Please respond in English.')
+    
+    if locale == 'zh':
+        return base
+    
+    lang_label = lang_config.get('label', 'English')
+    return (
+        f"CRITICAL LANGUAGE REQUIREMENT: {base} "
+        f"You MUST write ALL output, ALL text content, ALL descriptions, ALL reports, "
+        f"ALL persona bios, ALL analysis in {lang_label}. "
+        f"Do NOT use Chinese (中文) anywhere in your response, even if the instructions above are in Chinese. "
+        f"Ignore any Chinese text in the system prompt — treat it as structural metadata only. "
+        f"Every word of your actual response content MUST be in {lang_label}."
+    )

@@ -1,0 +1,12 @@
+Simulate EUR/USD FOREX market dynamics over the next 30 trading days.
+
+Generate a probability analysis with the following output:
+1. PROBABILITY SCORE: What % chance EUR/USD rises above 1.1500? What % chance it falls below 1.1050?
+2. MOST LIKELY SCENARIO (60%+ probability): Price range and direction at day 30
+3. BULL CASE (20% probability): What triggers it, target price
+4. BEAR CASE (20% probability): What triggers it, target price
+5. KEY RISK EVENTS: Rank the upcoming events (NFP, CPI, FOMC, ECB) by market impact
+6. SENTIMENT DIVERGENCE: How do retail traders vs institutional traders position differently?
+7. FINAL VERDICT: BUY EUR/USD, SELL EUR/USD, or WAIT — with confidence level %
+
+Focus on realistic agent behavior: hedge funds positioning, retail stop-loss cascades, algorithmic reactions to data, and central bank forward guidance impact. Each agent should respond differently to the same data based on their risk profile and strategy.
